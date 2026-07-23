@@ -175,53 +175,6 @@ section.panel h2 {
   color: var(--ink);
 }
 
-.weather-strip {
-  display: flex;
-  gap: 0.6rem;
-  overflow-x: auto;
-  padding-bottom: 0.25rem;
-  margin-bottom: 1.25rem;
-}
-
-.weather-strip[hidden] {
-  display: none;
-}
-
-.weather-chip {
-  flex: 0 0 auto;
-  min-width: 84px;
-  background: var(--sand);
-  border-radius: var(--radius);
-  padding: 0.6rem;
-  text-align: center;
-  font-size: 0.78rem;
-}
-
-.weather-chip .wc-day {
-  font-weight: 600;
-  color: var(--sea-dark);
-}
-
-.weather-chip .wc-icon {
-  font-size: 1.3rem;
-  margin: 0.2rem 0;
-}
-
-.weather-chip .wc-temp {
-  font-variant-numeric: tabular-nums;
-}
-
-.weather-chip .wc-wind {
-  color: var(--muted);
-  font-size: 0.72rem;
-}
-
-.weather-chip .wc-na {
-  color: var(--muted);
-  font-style: italic;
-  padding: 0.6rem 0;
-}
-
 table.timetable {
   width: 100%;
   border-collapse: collapse;
@@ -258,6 +211,23 @@ table.timetable td.day-cell {
   font-weight: 600;
   color: var(--sea-dark);
   white-space: nowrap;
+  vertical-align: top;
+}
+
+.day-weather {
+  margin-top: 0.2rem;
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+
+table.timetable.dual-route thead tr:first-child th:not(:first-child) {
+  text-align: center;
+  border-bottom: none;
 }
 
 table.timetable tr.day-boundary td {
@@ -424,6 +394,8 @@ table.timetable tr.next-departure td {
 
 .forecast-toggle {
   display: flex;
+  flex-wrap: wrap;
+  row-gap: 0.3rem;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -458,7 +430,8 @@ table.timetable tr.next-departure td {
 .fc-left .day-label {
   font-weight: 600;
   color: var(--sea-dark);
-  min-width: 6.5em;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .fc-left .icon {

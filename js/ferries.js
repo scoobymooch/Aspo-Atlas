@@ -1,8 +1,8 @@
 // Open-Meteo's free daily forecast only covers a ~16 day horizon, far short of the 56-day
-// timetable window, so dates outside that range simply render without a weather chip.
+// timetable window, so dates outside that range simply render without a weather line.
 let weatherByDate = {};
 
-async function loadWeatherStrip() {
+async function loadFerryWeather() {
   try {
     const data = await fetchOpenMeteo({
       daily: "weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max",
@@ -24,57 +24,140 @@ async function loadWeatherStrip() {
   }
 }
 
-function renderWeatherStrip(dates) {
-  const strip = document.getElementById("weather-strip");
-  strip.innerHTML = "";
+// The day cell for a route's first row of the day carries the date, and — when available —
+// a compact weather line (icon/temp/wind) underneath it.
+function buildDayCell(iso, showDate) {
+  const td = document.createElement("td");
+  td.className = "day-cell";
+  if (!showDate) return td;
 
-  if (!dates.some((iso) => weatherByDate[iso])) {
-    strip.hidden = true;
+  const dateEl = document.createElement("div");
+  dateEl.className = "day-date";
+  dateEl.textContent = formatDayShort(iso);
+  td.appendChild(dateEl);
+
+  const info = weatherByDate[iso];
+  if (info) {
+    const [desc, icon] = describeWeatherCode(info.code);
+
+    const weatherEl = document.createElement("div");
+    weatherEl.className = "day-weather";
+
+    const iconEl = document.createElement("span");
+    iconEl.setAttribute("aria-hidden", "true");
+    iconEl.textContent = icon;
+
+    const srDesc = document.createElement("span");
+    srDesc.className = "sr-only";
+    srDesc.textContent = desc;
+
+    const temp = document.createElement("span");
+    temp.textContent = `${info.max}°/${info.min}°`;
+
+    const wind = document.createElement("span");
+    wind.textContent = `💨${info.wind}`;
+
+    weatherEl.append(iconEl, srDesc, temp, wind);
+    td.appendChild(weatherEl);
+  }
+
+  return td;
+}
+
+// Renders one ferry route as a single table covering both directions side by side
+// (Day | out Departs/Line | return Departs/Line), rather than two separate tables.
+// Each day's departures aren't count-matched between directions, so rows are filled
+// out to the longer of the two lists, leaving blank cells on the shorter side.
+function renderDualRouteTable(containerId, outKey, outLabel, inKey, inLabel, dates) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = "";
+
+  const tbody = document.createElement("tbody");
+  const outRows = [];
+  const inRows = [];
+  let anyEntries = false;
+
+  dates.forEach((iso) => {
+    const outEntries = dayEntries(iso, outKey);
+    const inEntries = dayEntries(iso, inKey);
+    const rowCount = Math.max(outEntries.length, inEntries.length);
+
+    if (rowCount === 0) {
+      const tr = document.createElement("tr");
+      tr.className = "day-boundary";
+      tr.appendChild(buildDayCell(iso, true));
+      const emptyCell = document.createElement("td");
+      emptyCell.className = "empty-cell";
+      emptyCell.colSpan = 4;
+      emptyCell.textContent = "No departures";
+      tr.appendChild(emptyCell);
+      tbody.appendChild(tr);
+      return;
+    }
+
+    anyEntries = true;
+    for (let i = 0; i < rowCount; i++) {
+      const tr = document.createElement("tr");
+      if (i === 0) tr.className = "day-boundary";
+      tr.appendChild(buildDayCell(iso, i === 0));
+
+      const outE = outEntries[i];
+      const outTimeCell = document.createElement("td");
+      outTimeCell.className = "time-cell";
+      outTimeCell.textContent = outE ? outE.dep : "";
+      const outLineCell = document.createElement("td");
+      outLineCell.textContent = outE ? outE.line ?? "" : "";
+      tr.append(outTimeCell, outLineCell);
+      if (outE) outRows.push({ tr, timeCell: outTimeCell, iso, dep: outE.dep });
+
+      const inE = inEntries[i];
+      const inTimeCell = document.createElement("td");
+      inTimeCell.className = "time-cell";
+      inTimeCell.textContent = inE ? inE.dep : "";
+      const inLineCell = document.createElement("td");
+      inLineCell.textContent = inE ? inE.line ?? "" : "";
+      tr.append(inTimeCell, inLineCell);
+      if (inE) inRows.push({ tr, timeCell: inTimeCell, iso, dep: inE.dep });
+
+      tbody.appendChild(tr);
+    }
+  });
+
+  if (!anyEntries) {
+    container.innerHTML = `<p class="empty-note">No departures found for this route in the selected week.</p>`;
     return;
   }
 
-  dates.forEach((iso) => {
-    const info = weatherByDate[iso];
-    const chip = document.createElement("div");
-    chip.className = "weather-chip";
+  const table = document.createElement("table");
+  table.className = "timetable dual-route";
 
-    const dayLabel = document.createElement("div");
-    dayLabel.className = "wc-day";
-    dayLabel.textContent = formatDayShort(iso);
-    chip.appendChild(dayLabel);
+  const thead = document.createElement("thead");
+  const headRow1 = document.createElement("tr");
+  const dayTh = document.createElement("th");
+  dayTh.rowSpan = 2;
+  dayTh.textContent = "Day";
+  const outTh = document.createElement("th");
+  outTh.colSpan = 2;
+  outTh.textContent = outLabel;
+  const inTh = document.createElement("th");
+  inTh.colSpan = 2;
+  inTh.textContent = inLabel;
+  headRow1.append(dayTh, outTh, inTh);
 
-    if (info) {
-      const [desc, icon] = describeWeatherCode(info.code);
-
-      const iconEl = document.createElement("div");
-      iconEl.className = "wc-icon";
-      iconEl.setAttribute("aria-hidden", "true");
-      iconEl.textContent = icon;
-
-      const srDesc = document.createElement("span");
-      srDesc.className = "sr-only";
-      srDesc.textContent = desc;
-
-      const temp = document.createElement("div");
-      temp.className = "wc-temp";
-      temp.textContent = `${info.max}° / ${info.min}°`;
-
-      const wind = document.createElement("div");
-      wind.className = "wc-wind";
-      wind.textContent = `💨 ${info.wind} km/h`;
-
-      chip.append(iconEl, srDesc, temp, wind);
-    } else {
-      const na = document.createElement("div");
-      na.className = "wc-na";
-      na.textContent = "No forecast";
-      chip.appendChild(na);
-    }
-
-    strip.appendChild(chip);
+  const headRow2 = document.createElement("tr");
+  ["Departs", "Line", "Departs", "Line"].forEach((text) => {
+    const th = document.createElement("th");
+    th.textContent = text;
+    headRow2.appendChild(th);
   });
 
-  strip.hidden = false;
+  thead.append(headRow1, headRow2);
+  table.appendChild(thead);
+  table.appendChild(tbody);
+  container.appendChild(table);
+
+  markNextDeparture(outRows);
+  markNextDeparture(inRows);
 }
 
 function renderWeek(startIso) {
@@ -83,21 +166,37 @@ function renderWeek(startIso) {
   document.getElementById("week-range").textContent =
     `${formatDayHeading(dates[0])} – ${formatDayHeading(dates[6])}`;
 
-  renderWeatherStrip(dates);
-
-  renderRouteTable("ferry-to-aspo", "ferryToAspo", dates);
-  renderRouteTable("ferry-from-aspo", "ferryFromAspo", dates);
-  renderRouteTable("ferry-to-uto", "ferryToUto", dates);
-  renderRouteTable("ferry-from-uto", "ferryFromUto", dates);
-  renderRouteTable("ferry-to-orno", "ferryToOrno", dates);
-  renderRouteTable("ferry-from-orno", "ferryFromOrno", dates);
+  renderDualRouteTable(
+    "ferry-aspo",
+    "ferryToAspo",
+    "Dalarö Hotelbrygga → Aspö",
+    "ferryFromAspo",
+    "Aspö → Dalarö Hotelbrygga",
+    dates
+  );
+  renderDualRouteTable(
+    "ferry-uto",
+    "ferryToUto",
+    "Dalarö Hotelbrygga → Utö",
+    "ferryFromUto",
+    "Utö → Dalarö Hotelbrygga",
+    dates
+  );
+  renderDualRouteTable(
+    "ferry-orno",
+    "ferryToOrno",
+    "Dalarö Hotelbrygga → Ornö",
+    "ferryFromOrno",
+    "Ornö → Dalarö Hotelbrygga",
+    dates
+  );
 
   document.getElementById("content").hidden = false;
 }
 
 async function init() {
   setStatus("Loading timetables…", "info");
-  const [ok] = await Promise.all([loadTransportData(), loadWeatherStrip()]);
+  const [ok] = await Promise.all([loadTransportData(), loadFerryWeather()]);
   if (!ok) return;
   setStatus(null);
 

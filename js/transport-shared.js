@@ -167,15 +167,16 @@ function findNextDeparture(entries, todayIsoStr, nowMin) {
   return -1;
 }
 
+// entryRows: [{ tr, timeCell, iso, dep }], chronologically ordered.
 function markNextDeparture(entryRows) {
   const nextIdx = findNextDeparture(entryRows, todayIso(), timeToMinutes(nowHHMM()));
   if (nextIdx === -1) return;
-  const { tr } = entryRows[nextIdx];
+  const { tr, timeCell } = entryRows[nextIdx];
   tr.classList.add("next-departure");
   const badge = document.createElement("span");
   badge.className = "next-badge";
   badge.textContent = "Next";
-  tr.children[1].appendChild(badge);
+  timeCell.appendChild(badge);
 }
 
 // filters is optional: { timeWindow: {startMin, endMin} | null, hidePast: bool }.
@@ -244,7 +245,7 @@ function renderRouteTable(containerId, key, dates, filters) {
 
       tr.append(dayCell, timeCell, lineCell);
       tbody.appendChild(tr);
-      entryRows.push({ tr, iso, dep: e.dep });
+      entryRows.push({ tr, timeCell, iso, dep: e.dep });
     });
   });
 
@@ -303,7 +304,7 @@ function renderJourneyTable(containerId, dates, firstKey, secondKey, firstArrKey
 
       tr.append(dayCell, depCell, changeCell, onwardCell);
       tbody.appendChild(tr);
-      entryRows.push({ tr, iso, dep: c.dep });
+      entryRows.push({ tr, timeCell: depCell, iso, dep: c.dep });
     });
   });
 
