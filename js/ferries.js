@@ -66,8 +66,9 @@ function buildDayCell(iso, showDate) {
 
 // Renders one ferry route as a single table covering both directions side by side
 // (Day | out Departs/Line | return Departs/Line), rather than two separate tables.
-// Each day's departures aren't count-matched between directions, so rows are filled
-// out to the longer of the two lists, leaving blank cells on the shorter side.
+// Each day's departures from both directions are merged into one chronological list,
+// so a row only ever has one side filled in — never an outbound and return time paired
+// on the same row just because they happened to share a list index.
 function renderDualRouteTable(containerId, outKey, outLabel, inKey, inLabel, dates) {
   const container = document.getElementById(containerId);
   container.innerHTML = "";
@@ -78,11 +79,12 @@ function renderDualRouteTable(containerId, outKey, outLabel, inKey, inLabel, dat
   let anyEntries = false;
 
   dates.forEach((iso) => {
-    const outEntries = dayEntries(iso, outKey);
-    const inEntries = dayEntries(iso, inKey);
-    const rowCount = Math.max(outEntries.length, inEntries.length);
+    const merged = [
+      ...dayEntries(iso, outKey).map((e) => ({ ...e, dir: "out" })),
+      ...dayEntries(iso, inKey).map((e) => ({ ...e, dir: "in" })),
+    ].sort((a, b) => timeToMinutes(a.dep) - timeToMinutes(b.dep));
 
-    if (rowCount === 0) {
+    if (merged.length === 0) {
       const tr = document.createElement("tr");
       tr.className = "day-boundary";
       tr.appendChild(buildDayCell(iso, true));
@@ -96,31 +98,31 @@ function renderDualRouteTable(containerId, outKey, outLabel, inKey, inLabel, dat
     }
 
     anyEntries = true;
-    for (let i = 0; i < rowCount; i++) {
+    merged.forEach((e, i) => {
       const tr = document.createElement("tr");
       if (i === 0) tr.className = "day-boundary";
       tr.appendChild(buildDayCell(iso, i === 0));
 
-      const outE = outEntries[i];
       const outTimeCell = document.createElement("td");
       outTimeCell.className = "time-cell";
-      outTimeCell.textContent = outE ? outE.dep : "";
       const outLineCell = document.createElement("td");
-      outLineCell.textContent = outE ? outE.line ?? "" : "";
-      tr.append(outTimeCell, outLineCell);
-      if (outE) outRows.push({ tr, timeCell: outTimeCell, iso, dep: outE.dep });
-
-      const inE = inEntries[i];
       const inTimeCell = document.createElement("td");
       inTimeCell.className = "time-cell";
-      inTimeCell.textContent = inE ? inE.dep : "";
       const inLineCell = document.createElement("td");
-      inLineCell.textContent = inE ? inE.line ?? "" : "";
-      tr.append(inTimeCell, inLineCell);
-      if (inE) inRows.push({ tr, timeCell: inTimeCell, iso, dep: inE.dep });
 
+      if (e.dir === "out") {
+        outTimeCell.textContent = e.dep;
+        outLineCell.textContent = e.line ?? "";
+        outRows.push({ tr, timeCell: outTimeCell, iso, dep: e.dep });
+      } else {
+        inTimeCell.textContent = e.dep;
+        inLineCell.textContent = e.line ?? "";
+        inRows.push({ tr, timeCell: inTimeCell, iso, dep: e.dep });
+      }
+
+      tr.append(outTimeCell, outLineCell, inTimeCell, inLineCell);
       tbody.appendChild(tr);
-    }
+    });
   });
 
   if (!anyEntries) {
