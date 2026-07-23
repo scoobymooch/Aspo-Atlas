@@ -33,7 +33,14 @@ const STOPS_PATH = path.join(process.cwd(), "data", "stops.json");
 const OUTPUT_PATH = path.join(process.cwd(), "data", "transport.json");
 
 const WINDOW_DAYS = 56; // ~8 weeks; must match WINDOW_DAYS in js/transport.js
-const POLITE_DELAY_MS = 200;
+// A live run surfaced Trafiklab's actual hard quota: 45 requests/minute. 1400ms keeps
+// steady-state pace under ~43/min with margin, avoiding reliance on retries.
+const POLITE_DELAY_MS = 1400;
+// Quota-exceeded errors are a hard per-minute limit, so a short exponential backoff
+// isn't guaranteed to land in a fresh window -- wait long enough to reliably cross into
+// one, with fewer, longer retries rather than many short ones.
+const QUOTA_BACKOFF_MS = 65_000;
+const QUOTA_MAX_ATTEMPTS = 3;
 
 const PRODUCT = { train: 4 + 16, bus: 8 + 128, ferry: 256 };
 const BUS_CLASSES = new Set(["8", "128"]);
@@ -119,27 +126,39 @@ async function fetchDepartureBoard(extId, date, productsMask) {
   url.searchParams.set("products", String(productsMask));
   url.searchParams.set("accessId", API_KEY);
 
-  let attempt = 0;
+  let quotaAttempt = 0;
   while (true) {
-    attempt += 1;
     const res = await fetch(url);
-    if ((res.status === 429 || res.status === 401) && attempt <= 4) {
-      const backoff = 1000 * 2 ** (attempt - 1);
-      console.warn(`  HTTP ${res.status} from departureBoard (extId=${extId}, date=${date}), retrying in ${backoff}ms`);
-      await sleep(backoff);
-      continue;
-    }
+
+    // Trafiklab signals its hard per-minute quota via HTTP 401 with an API_QUOTA body
+    // (confirmed from a live run), not the more conventional 429. A short exponential
+    // backoff isn't reliably enough to cross into a fresh quota window, so this waits
+    // long enough to actually clear it, with few but long retries.
     if (!res.ok) {
       const body = await res.text().catch(() => "");
+      const isQuota = body.includes("API_QUOTA") || body.includes("API_TOO_MANY_REQUESTS");
+      if (isQuota && quotaAttempt < QUOTA_MAX_ATTEMPTS) {
+        quotaAttempt += 1;
+        console.warn(
+          `  Quota exceeded for extId=${extId} date=${date}, waiting ${QUOTA_BACKOFF_MS}ms (attempt ${quotaAttempt}/${QUOTA_MAX_ATTEMPTS})`
+        );
+        await sleep(QUOTA_BACKOFF_MS);
+        continue;
+      }
       throw new Error(`departureBoard failed for extId=${extId} date=${date}: HTTP ${res.status} ${body.slice(0, 300)}`);
     }
     const data = await res.json();
     if (data?.errorCode) {
       if (data.errorCode === "SVC_NO_RESULTS") return [];
-      if ((data.errorCode === "API_QUOTA" || data.errorCode === "API_TOO_MANY_REQUESTS") && attempt <= 4) {
-        const backoff = 1000 * 2 ** (attempt - 1);
-        console.warn(`  ${data.errorCode} for extId=${extId} date=${date}, retrying in ${backoff}ms`);
-        await sleep(backoff);
+      if (
+        (data.errorCode === "API_QUOTA" || data.errorCode === "API_TOO_MANY_REQUESTS") &&
+        quotaAttempt < QUOTA_MAX_ATTEMPTS
+      ) {
+        quotaAttempt += 1;
+        console.warn(
+          `  ${data.errorCode} for extId=${extId} date=${date}, waiting ${QUOTA_BACKOFF_MS}ms (attempt ${quotaAttempt}/${QUOTA_MAX_ATTEMPTS})`
+        );
+        await sleep(QUOTA_BACKOFF_MS);
         continue;
       }
       throw new Error(`departureBoard returned ${data.errorCode} for extId=${extId} date=${date}: ${data.errorText ?? ""}`);
