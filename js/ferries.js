@@ -65,8 +65,8 @@ function buildDayCell(iso, showDate) {
 }
 
 // Renders one ferry route as a single table covering both directions side by side
-// (Day | out Departs/Line | return Departs/Line), rather than two separate tables.
-// Each day's departures from both directions are merged into one chronological list,
+// (Day | out Depart→Arrive/Line | return Depart→Arrive/Line), rather than two separate
+// tables. Each day's departures from both directions are merged into one chronological list,
 // so a row only ever has one side filled in — never an outbound and return time paired
 // on the same row just because they happened to share a list index.
 function renderDualRouteTable(containerId, outKey, outLabel, inKey, inLabel, dates) {
@@ -111,11 +111,11 @@ function renderDualRouteTable(containerId, outKey, outLabel, inKey, inLabel, dat
       const inLineCell = document.createElement("td");
 
       if (e.dir === "out") {
-        outTimeCell.textContent = e.dep;
+        outTimeCell.textContent = e.arr ? `${e.dep} → ${e.arr}` : e.dep;
         outLineCell.textContent = e.line ?? "";
         outRows.push({ tr, timeCell: outTimeCell, iso, dep: e.dep });
       } else {
-        inTimeCell.textContent = e.dep;
+        inTimeCell.textContent = e.arr ? `${e.dep} → ${e.arr}` : e.dep;
         inLineCell.textContent = e.line ?? "";
         inRows.push({ tr, timeCell: inTimeCell, iso, dep: e.dep });
       }
@@ -147,7 +147,7 @@ function renderDualRouteTable(containerId, outKey, outLabel, inKey, inLabel, dat
   headRow1.append(dayTh, outTh, inTh);
 
   const headRow2 = document.createElement("tr");
-  ["Departs", "Line", "Departs", "Line"].forEach((text) => {
+  ["Depart → Arrive", "Line", "Depart → Arrive", "Line"].forEach((text) => {
     const th = document.createElement("th");
     th.textContent = text;
     headRow2.appendChild(th);
@@ -156,7 +156,11 @@ function renderDualRouteTable(containerId, outKey, outLabel, inKey, inLabel, dat
   thead.append(headRow1, headRow2);
   table.appendChild(thead);
   table.appendChild(tbody);
-  container.appendChild(table);
+
+  const scrollWrap = document.createElement("div");
+  scrollWrap.className = "table-scroll";
+  scrollWrap.appendChild(table);
+  container.appendChild(scrollWrap);
 
   markNextDeparture(outRows);
   markNextDeparture(inRows);
