@@ -160,7 +160,7 @@ function filterByClassAndPasslist(entries, allowedClasses, targetExtId, arrKey) 
 }
 
 async function fetchDayData(date, stops) {
-  const { dalaroHotelbrygga, handen, stockholmCity, aspoDalaro, uto, orno } = stops;
+  const { dalaroHotelbrygga, handen, handenBusStop, stockholmCity, aspoDalaro, uto, orno } = stops;
 
   const dalaroBoard = await fetchDepartureBoard(dalaroHotelbrygga.extId, date, PRODUCT.bus | PRODUCT.ferry);
   await sleep(POLITE_DELAY_MS);
@@ -176,7 +176,7 @@ async function fetchDayData(date, stops) {
   await sleep(POLITE_DELAY_MS);
 
   return {
-    busToHanden: filterByClassAndPasslist(dalaroBoard, BUS_CLASSES, handen.extId, "arrHanden"),
+    busToHanden: filterByClassAndPasslist(dalaroBoard, BUS_CLASSES, handenBusStop.extId, "arrHanden"),
     ferryToAspo: filterByClassAndPasslist(dalaroBoard, FERRY_CLASSES, aspoDalaro.extId, "arr"),
     ferryToUto: filterByClassAndPasslist(dalaroBoard, FERRY_CLASSES, uto.extId, "arr"),
     ferryToOrno: filterByClassAndPasslist(dalaroBoard, FERRY_CLASSES, orno.extId, "arr"),
