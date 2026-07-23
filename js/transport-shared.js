@@ -178,6 +178,19 @@ function markNextDeparture(entryRows) {
   tr.children[1].appendChild(badge);
 }
 
+// filters is optional: { timeWindow: {startMin, endMin} | null, hidePast: bool }.
+function passesFilters(iso, dep, filters) {
+  if (!filters) return true;
+  if (filters.timeWindow) {
+    const mins = timeToMinutes(dep);
+    if (mins < filters.timeWindow.startMin || mins > filters.timeWindow.endMin) return false;
+  }
+  if (filters.hidePast && iso === todayIso() && timeToMinutes(dep) < timeToMinutes(nowHHMM())) {
+    return false;
+  }
+  return true;
+}
+
 function dayBoundaryRow(dayLabel, emptyText, colspan) {
   const tr = document.createElement("tr");
   tr.className = "day-boundary";
@@ -199,7 +212,7 @@ function dayBoundaryRow(dayLabel, emptyText, colspan) {
 // with a day label on each day's first row instead of a separate table per day. Departure
 // times and line numbers come from data/transport.json, so rows are built via DOM APIs
 // (not innerHTML) rather than trusting that data to be free of HTML metacharacters.
-function renderRouteTable(containerId, key, dates) {
+function renderRouteTable(containerId, key, dates, filters) {
   const container = document.getElementById(containerId);
   container.innerHTML = "";
 
@@ -208,7 +221,7 @@ function renderRouteTable(containerId, key, dates) {
   let anyEntries = false;
 
   dates.forEach((iso) => {
-    const entries = dayEntries(iso, key);
+    const entries = dayEntries(iso, key).filter((e) => passesFilters(iso, e.dep, filters));
     if (entries.length === 0) {
       tbody.appendChild(dayBoundaryRow(formatDayShort(iso), "No departures", 2));
       return;
@@ -250,7 +263,7 @@ function renderRouteTable(containerId, key, dates) {
 }
 
 // Same idea as renderRouteTable, for the combined bus+train "journey" panels.
-function renderJourneyTable(containerId, dates, firstKey, secondKey, firstArrKey) {
+function renderJourneyTable(containerId, dates, firstKey, secondKey, firstArrKey, filters) {
   const container = document.getElementById(containerId);
   container.innerHTML = "";
 
@@ -261,7 +274,9 @@ function renderJourneyTable(containerId, dates, firstKey, secondKey, firstArrKey
   dates.forEach((iso) => {
     const first = dayEntries(iso, firstKey);
     const second = dayEntries(iso, secondKey);
-    const connections = buildConnections(first, second, firstArrKey);
+    const connections = buildConnections(first, second, firstArrKey).filter((c) =>
+      passesFilters(iso, c.dep, filters)
+    );
 
     if (connections.length === 0) {
       tbody.appendChild(dayBoundaryRow(formatDayShort(iso), "No connecting journey", 3));

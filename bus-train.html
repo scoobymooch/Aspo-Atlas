@@ -31,8 +31,19 @@
       <span class="week-range" id="week-range"></span>
     </div>
 
+    <div class="filter-bar">
+      <label><input type="checkbox" id="filter-window" /> Hide before 08:00 / after 21:00</label>
+      <label><input type="checkbox" id="filter-past" /> Hide departed times</label>
+      <label for="filter-mode">Show:</label>
+      <select id="filter-mode">
+        <option value="both" selected>Bus + Train</option>
+        <option value="bus">Bus only</option>
+        <option value="train">Train only</option>
+      </select>
+    </div>
+
     <div id="content" hidden>
-      <section class="panel">
+      <section class="panel" id="panel-bus">
         <h3>Bus 839 · Dalarö Hotelbrygga ↔ Handen</h3>
         <div class="direction-pair">
           <div class="route-block">
@@ -46,7 +57,7 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="panel-train">
         <h3>Train · Handen ↔ Stockholm City</h3>
         <div class="direction-pair">
           <div class="route-block">
@@ -60,7 +71,7 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="panel-combined">
         <h3>Combined journey · Dalarö Hotelbrygga ↔ Stockholm City (via Handen)</h3>
         <p class="panel-subtitle">
           Bus 839 paired with the next matching train, and vice versa for the return.
