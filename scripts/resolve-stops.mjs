@@ -40,6 +40,16 @@ const TARGETS = {
     near: [59.1677, 18.1477],
     radiusKm: 10,
   },
+  // Bus 839 towards Handen was confirmed (via a live run's raw passlist data) to
+  // terminate at "Handen Rudsjöterrassen", a stop ~300m from Handen station itself --
+  // its passlist never includes the station's extId, only this one. The reverse
+  // direction (Handen -> Dalarö) does depart from the station itself, so this target is
+  // only used for matching the Dalarö -> Handen bus leg specifically.
+  handenBusStop: {
+    search: "Handen Rudsjöterrassen",
+    near: [59.165301, 18.138407],
+    radiusKm: 5,
+  },
   stockholmCity: {
     search: "Stockholm City",
     near: [59.3301, 18.0582],
@@ -147,15 +157,21 @@ async function resolveTarget(key, target) {
   // with the search term (e.g. "Stockholm City station" for a "Stockholm City"
   // search), then fall back to the highest-weight (busiest) one in the pool.
   // Within each tier, pick the highest-weight candidate rather than just the first
-  // match in API response order -- e.g. for "Ornö", both "Ornö gruva" (an area marker)
-  // and "Hässelmara (Ornö) brygga" (the actual ferry pier, much busier) start with the
-  // search term; array order alone isn't a reliable way to prefer the real pier.
+  // match in API response order. Waxholmsbolaget ferry stops are consistently named
+  // "<place> brygga" ("brygga" = pier/jetty), so for island searches like "Ornö" that
+  // also match unrelated area markers ("Ornö gruva", "Ornö kyrka" -- which don't start
+  // with the place name pattern, so lose on plain weight), prefer an in-radius
+  // candidate containing "brygga" before falling back to the starts-with/weight tiers.
   const byWeight = (a, b) => Number(b.weight ?? 0) - Number(a.weight ?? 0);
   const searchLower = target.search.trim().toLowerCase();
   const exactMatches = pool.filter((c) => c.name.trim().toLowerCase() === searchLower);
+  const bryggaMatches = pool.filter((c) => c.name.toLowerCase().includes("brygga"));
   const startsWithMatches = pool.filter((c) => c.name.trim().toLowerCase().startsWith(searchLower));
   const chosen =
-    exactMatches.sort(byWeight)[0] ?? startsWithMatches.sort(byWeight)[0] ?? pool.sort(byWeight)[0];
+    exactMatches.sort(byWeight)[0] ??
+    bryggaMatches.sort(byWeight)[0] ??
+    startsWithMatches.sort(byWeight)[0] ??
+    pool.sort(byWeight)[0];
 
   console.log(`[${key}] chosen: ${chosen.name} (extId=${chosen.extId})`);
 

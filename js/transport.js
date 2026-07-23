@@ -1,5 +1,7 @@
 const WINDOW_DAYS = 56; // must match scripts/fetch-transport.mjs
-const MIN_CONNECTION_MINUTES = 2;
+// Bus 839's Handen-bound arrival is measured at Handen Rudsjöterrassen, a short walk
+// from the actual station platform, so the minimum connection needs to cover that.
+const MIN_CONNECTION_MINUTES = 6;
 
 let transportData = null;
 
