@@ -78,7 +78,10 @@ function extractDepartures(data) {
 }
 
 function extractPasslist(entry) {
-  const raw = entry?.Stops?.stop;
+  // The real API returns "Stops.Stop" (capital Stop) despite the published OpenAPI
+  // spec saying "Stops.stop" -- same kind of spec/reality mismatch already hit on the
+  // stop-lookup endpoint. Check both cases defensively.
+  const raw = entry?.Stops?.Stop ?? entry?.Stops?.stop;
   if (!raw) return [];
   return Array.isArray(raw) ? raw : [raw];
 }
