@@ -1,0 +1,38 @@
+{
+  "dalaroHotelbrygga": {
+    "name": "Dalarö Hotellbryggan (Haninge kn)",
+    "extId": "740001036",
+    "lat": 59.129658,
+    "lon": 18.406393
+  },
+  "handen": {
+    "name": "Handen station (Haninge kn)",
+    "extId": "740000699",
+    "lat": 59.167566,
+    "lon": 18.13447
+  },
+  "stockholmCity": {
+    "name": "Stockholm City station",
+    "extId": "740001617",
+    "lat": 59.331143,
+    "lon": 18.059437
+  },
+  "aspoDalaro": {
+    "name": "Aspö (Dalarö) brygga (Haninge kn)",
+    "extId": "740034456",
+    "lat": 59.117002,
+    "lon": 18.411949
+  },
+  "uto": {
+    "name": "Utö Gruvbryggan brygga (Haninge kn)",
+    "extId": "740020695",
+    "lat": 58.970486,
+    "lon": 18.325221
+  },
+  "orno": {
+    "name": "Ornö gruva (Haninge kn)",
+    "extId": "740069755",
+    "lat": 59.059363,
+    "lon": 18.425109
+  }
+}
