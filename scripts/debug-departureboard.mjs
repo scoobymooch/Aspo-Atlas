@@ -49,21 +49,18 @@ const deps = Array.isArray(raw) ? raw : raw ? [raw] : [];
 console.log("Raw Departure count (no products filter):", deps.length);
 console.log("Top-level response keys:", Object.keys(data));
 
-for (const d of deps.slice(0, 8)) {
-  const passlist = d.Stops?.stop;
-  const passlistArr = Array.isArray(passlist) ? passlist : passlist ? [passlist] : [];
-  console.log(
-    JSON.stringify({
-      name: d.name,
-      type: d.type,
-      date: d.date,
-      time: d.time,
-      direction: d.direction,
-      productAtStop: d.ProductAtStop,
-      passlistCount: passlistArr.length,
-      passlistSample: passlistArr.slice(0, 3).map((s) => ({ name: s.name, extId: s.extId, arrTime: s.arrTime })),
-    })
-  );
+if (deps.length > 0) {
+  console.log("\nFull key list of first entry:", Object.keys(deps[0]));
+  console.log("\nFull JSON of first entry:");
+  console.log(JSON.stringify(deps[0], null, 2));
+
+  // Also find one with a longer route (bus 839, direction Handen) in case the first
+  // entry happens to be an edge case.
+  const bus839 = deps.find((d) => d.ProductAtStop?.line === "839");
+  if (bus839) {
+    console.log("\nFull JSON of a bus 839 entry:");
+    console.log(JSON.stringify(bus839, null, 2));
+  }
 }
 
 if (deps.length === 0) {
