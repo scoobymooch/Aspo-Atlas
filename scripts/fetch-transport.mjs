@@ -120,14 +120,15 @@ async function fetchDepartureBoard(extId, date, productsMask) {
   while (true) {
     attempt += 1;
     const res = await fetch(url);
-    if (res.status === 429 && attempt <= 4) {
+    if ((res.status === 429 || res.status === 401) && attempt <= 4) {
       const backoff = 1000 * 2 ** (attempt - 1);
-      console.warn(`  429 from departureBoard (extId=${extId}, date=${date}), retrying in ${backoff}ms`);
+      console.warn(`  HTTP ${res.status} from departureBoard (extId=${extId}, date=${date}), retrying in ${backoff}ms`);
       await sleep(backoff);
       continue;
     }
     if (!res.ok) {
-      throw new Error(`departureBoard failed for extId=${extId} date=${date}: HTTP ${res.status}`);
+      const body = await res.text().catch(() => "");
+      throw new Error(`departureBoard failed for extId=${extId} date=${date}: HTTP ${res.status} ${body.slice(0, 300)}`);
     }
     const data = await res.json();
     if (data?.errorCode) {
