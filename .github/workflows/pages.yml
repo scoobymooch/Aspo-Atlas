@@ -4,6 +4,13 @@ on:
   push:
     branches: [main]
   workflow_dispatch: {}
+  # GitHub Actions deliberately doesn't let a push made with the default GITHUB_TOKEN
+  # (e.g. update-transport.yml committing fresh data) trigger other `push`-triggered
+  # workflows, to avoid infinite loops. Without this, a new data commit would sit on
+  # main until something else happened to push again or someone redeployed manually.
+  workflow_run:
+    workflows: ["Update transport timetables"]
+    types: [completed]
 
 permissions:
   contents: read
@@ -16,6 +23,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
