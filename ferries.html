@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ferries — Aspö Atlas</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <h1>Aspö Atlas</h1>
+      <nav>
+        <a href="index.html">Home</a>
+        <a href="weather.html">Weather</a>
+        <a href="bus-train.html">Bus &amp; Train</a>
+        <a href="ferries.html" aria-current="page">Ferries</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <h2>Ferries to and from Aspö</h2>
+    <div id="generated-at" class="freshness-badge" hidden></div>
+    <div id="status" role="status" aria-live="polite"></div>
+
+    <div class="date-picker">
+      <label for="week-start">Show the week starting:</label>
+      <input type="date" id="week-start" />
+      <button type="button" id="today-btn">Today</button>
+      <span class="week-range" id="week-range"></span>
+    </div>
+
+    <div id="content" hidden>
+      <section class="panel">
+        <h3>Ferry · Dalarö Hotelbrygga ↔ Aspö</h3>
+        <div class="direction-pair">
+          <div class="route-block">
+            <h4>Dalarö Hotelbrygga → Aspö</h4>
+            <div id="ferry-to-aspo"></div>
+          </div>
+          <div class="route-block">
+            <h4>Aspö → Dalarö Hotelbrygga</h4>
+            <div id="ferry-from-aspo"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>Ferry · Dalarö Hotelbrygga ↔ Utö</h3>
+        <div class="direction-pair">
+          <div class="route-block">
+            <h4>Dalarö Hotelbrygga → Utö</h4>
+            <div id="ferry-to-uto"></div>
+          </div>
+          <div class="route-block">
+            <h4>Utö → Dalarö Hotelbrygga</h4>
+            <div id="ferry-from-uto"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>Ferry · Dalarö Hotelbrygga ↔ Ornö</h3>
+        <div class="direction-pair">
+          <div class="route-block">
+            <h4>Dalarö Hotelbrygga → Ornö</h4>
+            <div id="ferry-to-orno"></div>
+          </div>
+          <div class="route-block">
+            <h4>Ornö → Dalarö Hotelbrygga</h4>
+            <div id="ferry-from-orno"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    Aspö Atlas — a family project. Hosted for free on GitHub Pages.
+  </footer>
+
+  <script src="js/transport-shared.js"></script>
+  <script src="js/ferries.js"></script>
+</body>
+</html>

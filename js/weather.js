@@ -34,22 +34,109 @@ const WMO_CODES = {
   99: ["Thunderstorm with hail", "⛈️"],
 };
 
+let hourlyData = null;
+
 function describeWeatherCode(code) {
   return WMO_CODES[code] ?? [`Weather code ${code}`, "🌡️"];
 }
 
-function setStatus(message, type) {
+function setStatus(message, type, opts = {}) {
   const el = document.getElementById("status");
   if (!message) {
     el.innerHTML = "";
     return;
   }
-  el.innerHTML = `<div class="status-banner ${type}">${message}</div>`;
+  const retryBtn = opts.onRetry ? `<button type="button" class="status-retry">Try again</button>` : "";
+  const details = opts.detail
+    ? `<details class="status-detail"><summary>Technical details</summary>${opts.detail}</details>`
+    : "";
+  el.innerHTML = `<div class="status-banner ${type}">${message}${retryBtn}${details}</div>`;
+  if (opts.onRetry) {
+    el.querySelector(".status-retry").addEventListener("click", opts.onRetry);
+  }
 }
 
 function formatDay(dateStr) {
   const date = new Date(`${dateStr}T00:00:00`);
   return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+}
+
+function formatHour(timeStr) {
+  return timeStr.slice(11, 16);
+}
+
+function hourlyForDate(dateStr) {
+  if (!hourlyData) return [];
+  return hourlyData.time
+    .map((time, i) => ({
+      time,
+      temp: hourlyData.temperature_2m[i],
+      code: hourlyData.weather_code[i],
+      precip: hourlyData.precipitation[i],
+    }))
+    .filter((entry) => entry.time.startsWith(dateStr));
+}
+
+function renderHourlyDetail(container, entries) {
+  container.innerHTML = entries
+    .map((entry) => {
+      const [desc, icon] = describeWeatherCode(entry.code);
+      const precip = entry.precip > 0 ? `<span class="hprecip">💧 ${entry.precip} mm</span>` : "";
+      return `
+        <div class="hourly-row">
+          <span class="htime">${formatHour(entry.time)}</span>
+          <span class="hicon" aria-hidden="true">${icon}</span>
+          <span class="sr-only">${desc}</span>
+          <span class="htemp">${Math.round(entry.temp)}°C</span>
+          ${precip}
+        </div>`;
+    })
+    .join("");
+}
+
+function toggleForecastDay(card, dateStr) {
+  const detail = card.querySelector(".hourly-detail");
+  const expanded = card.getAttribute("aria-expanded") === "true";
+
+  if (!expanded && !detail.dataset.rendered) {
+    renderHourlyDetail(detail, hourlyForDate(dateStr));
+    detail.dataset.rendered = "true";
+  }
+
+  card.setAttribute("aria-expanded", String(!expanded));
+  detail.hidden = expanded;
+}
+
+function renderForecastDay(dateStr, i, daily) {
+  const [desc, icon] = describeWeatherCode(daily.weather_code[i]);
+  const max = Math.round(daily.temperature_2m_max[i]);
+  const min = Math.round(daily.temperature_2m_min[i]);
+  const precip = daily.precipitation_sum[i];
+
+  const card = document.createElement("div");
+  card.className = "forecast-day";
+  card.tabIndex = 0;
+  card.setAttribute("role", "button");
+  card.setAttribute("aria-expanded", "false");
+  card.innerHTML = `
+    <div class="day-label">${formatDay(dateStr)}</div>
+    <div class="icon" aria-hidden="true">${icon}</div>
+    <div>${max}° / ${min}°</div>
+    <div class="desc">${desc}</div>
+    ${precip > 0 ? `<div class="precip">💧 ${precip} mm</div>` : ""}
+    <div class="hourly-detail" hidden></div>
+  `;
+
+  const toggle = () => toggleForecastDay(card, dateStr);
+  card.addEventListener("click", toggle);
+  card.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggle();
+    }
+  });
+
+  return card;
 }
 
 async function loadWeather() {
@@ -60,6 +147,7 @@ async function loadWeather() {
   url.searchParams.set("longitude", ASPO_LON);
   url.searchParams.set("current", "temperature_2m,weather_code,wind_speed_10m");
   url.searchParams.set("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum");
+  url.searchParams.set("hourly", "temperature_2m,weather_code,precipitation");
   url.searchParams.set("timezone", "Europe/Stockholm");
   url.searchParams.set("forecast_days", "7");
 
@@ -70,8 +158,9 @@ async function loadWeather() {
     data = await res.json();
   } catch (err) {
     setStatus(
-      `Couldn't load weather data (${err.message}). Check your connection and try reloading.`,
-      "error"
+      "Couldn't load weather data. Check your connection and try again.",
+      "error",
+      { onRetry: () => location.reload(), detail: err.message }
     );
     return;
   }
@@ -81,32 +170,22 @@ async function loadWeather() {
   const current = data.current;
   if (current) {
     const [desc, icon] = describeWeatherCode(current.weather_code);
-    document.getElementById("current-icon").textContent = icon;
+    const iconEl = document.getElementById("current-icon");
+    iconEl.textContent = icon;
     document.getElementById("current-temp").textContent = `${Math.round(current.temperature_2m)}°C`;
     document.getElementById("current-desc").textContent = desc;
     document.getElementById("current-wind").textContent = `Wind ${Math.round(current.wind_speed_10m)} km/h`;
     document.getElementById("current-panel").hidden = false;
   }
 
+  hourlyData = data.hourly ?? null;
+
   const daily = data.daily;
   if (daily) {
     const grid = document.getElementById("forecast-grid");
     grid.innerHTML = "";
     daily.time.forEach((dateStr, i) => {
-      const [desc, icon] = describeWeatherCode(daily.weather_code[i]);
-      const max = Math.round(daily.temperature_2m_max[i]);
-      const min = Math.round(daily.temperature_2m_min[i]);
-      const precip = daily.precipitation_sum[i];
-      const div = document.createElement("div");
-      div.className = "forecast-day";
-      div.innerHTML = `
-        <div class="day-label">${formatDay(dateStr)}</div>
-        <div class="icon">${icon}</div>
-        <div>${max}° / ${min}°</div>
-        <div style="color:var(--muted);font-size:0.8rem;">${desc}</div>
-        ${precip > 0 ? `<div style="color:var(--muted);font-size:0.8rem;">💧 ${precip} mm</div>` : ""}
-      `;
-      grid.appendChild(div);
+      grid.appendChild(renderForecastDay(dateStr, i, daily));
     });
     document.getElementById("forecast-panel").hidden = false;
   }

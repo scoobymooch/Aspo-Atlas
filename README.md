@@ -11,7 +11,7 @@ for getting to and from the island.
 - **No build step**: plain HTML/CSS/JS. Nothing to install, nothing to compile.
 - **Weather** (`weather.html` / `js/weather.js`): fetched directly in the browser from
   [Open-Meteo](https://open-meteo.com/), which is free, keyless, and CORS-enabled.
-- **Transport** (`transport.html` / `js/transport.js`): reads a static `data/transport.json`
+- **Transport** (`bus-train.html` / `ferries.html`, sharing `js/transport-shared.js`): reads a static `data/transport.json`
   file. It does **not** call Trafiklab directly from the browser — their API doesn't send
   CORS headers, so a browser `fetch()` would be blocked, and it would also expose the API
   key client-side. Instead:
@@ -36,9 +36,9 @@ for getting to and from the island.
   City train, and the three Dalarö Hotelbrygga ferries (Aspö, Utö, Ornö), in both
   directions. Backfills the full window on first run; afterwards only fetches the single
   new day entering the window each day (~6 API calls/day). The combined "bus + train as
-  one journey" view isn't a separate API call — `js/transport.js` stitches it client-side
-  from the same data (pairing each bus's arrival at Handen with the next train departure,
-  and vice versa for the return).
+  one journey" view isn't a separate API call — `js/transport-shared.js` stitches it
+  client-side from the same data (pairing each bus's arrival at Handen with the next train
+  departure, and vice versa for the return).
 
 ## Local development
 
