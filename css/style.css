@@ -230,6 +230,11 @@ table.timetable.dual-route thead tr:first-child th:not(:first-child) {
   border-bottom: none;
 }
 
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 table.timetable tr.day-boundary td {
   border-top: 2px solid var(--border);
   padding-top: 0.6rem;
