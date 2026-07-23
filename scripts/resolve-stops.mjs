@@ -146,11 +146,16 @@ async function resolveTarget(key, target) {
   // Prefer an exact (case-insensitive) name match, then a candidate whose name starts
   // with the search term (e.g. "Stockholm City station" for a "Stockholm City"
   // search), then fall back to the highest-weight (busiest) one in the pool.
+  // Within each tier, pick the highest-weight candidate rather than just the first
+  // match in API response order -- e.g. for "Ornö", both "Ornö gruva" (an area marker)
+  // and "Hässelmara (Ornö) brygga" (the actual ferry pier, much busier) start with the
+  // search term; array order alone isn't a reliable way to prefer the real pier.
+  const byWeight = (a, b) => Number(b.weight ?? 0) - Number(a.weight ?? 0);
   const searchLower = target.search.trim().toLowerCase();
-  const exact = pool.find((c) => c.name.trim().toLowerCase() === searchLower);
-  const startsWith = pool.find((c) => c.name.trim().toLowerCase().startsWith(searchLower));
+  const exactMatches = pool.filter((c) => c.name.trim().toLowerCase() === searchLower);
+  const startsWithMatches = pool.filter((c) => c.name.trim().toLowerCase().startsWith(searchLower));
   const chosen =
-    exact ?? startsWith ?? pool.sort((a, b) => Number(b.weight ?? 0) - Number(a.weight ?? 0))[0];
+    exactMatches.sort(byWeight)[0] ?? startsWithMatches.sort(byWeight)[0] ?? pool.sort(byWeight)[0];
 
   console.log(`[${key}] chosen: ${chosen.name} (extId=${chosen.extId})`);
 
