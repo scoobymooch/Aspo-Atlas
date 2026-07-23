@@ -1,0 +1,24 @@
+name: Debug ResRobot response
+
+# Temporary diagnostic workflow -- delete once the zero-results issue in
+# fetch-transport.mjs is understood and fixed.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Dump raw departureBoard response
+        env:
+          TRAFIKLAB_RESROBOT_API_KEY: ${{ secrets.TRAFIKLAB_RESROBOT_API_KEY }}
+        run: node scripts/debug-departureboard.mjs
