@@ -1,0 +1,13 @@
+{
+  "name": "aspo-atlas",
+  "private": true,
+  "type": "module",
+  "description": "Static family website for Aspö (near Dalarö), with weather and public transport timetables.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "resolve-stops": "node scripts/resolve-stops.mjs",
+    "fetch-transport": "node scripts/fetch-transport.mjs"
+  }
+}

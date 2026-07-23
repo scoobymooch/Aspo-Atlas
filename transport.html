@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Transport — Aspö Atlas</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <h1>Aspö Atlas</h1>
+      <nav>
+        <a href="index.html">Home</a>
+        <a href="weather.html">Weather</a>
+        <a href="transport.html" aria-current="page">Transport</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <h2>Getting to and from Aspö</h2>
+    <div id="status"></div>
+
+    <div class="date-picker">
+      <label for="week-start">Show the week starting:</label>
+      <input type="date" id="week-start" />
+      <button type="button" id="today-btn">Today</button>
+      <span class="week-range" id="week-range"></span>
+    </div>
+
+    <div id="content" hidden>
+      <section class="panel">
+        <h3>Bus 839 · Dalarö Hotelbrygga ↔ Handen</h3>
+        <div class="direction-pair">
+          <div class="route-block">
+            <h4>Dalarö Hotelbrygga → Handen</h4>
+            <div id="bus-to-handen"></div>
+          </div>
+          <div class="route-block">
+            <h4>Handen → Dalarö Hotelbrygga</h4>
+            <div id="bus-to-dalaro"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>Train · Handen ↔ Stockholm City</h3>
+        <div class="direction-pair">
+          <div class="route-block">
+            <h4>Handen → Stockholm City</h4>
+            <div id="train-to-stockholm"></div>
+          </div>
+          <div class="route-block">
+            <h4>Stockholm City → Handen</h4>
+            <div id="train-to-handen"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>Combined journey · Dalarö Hotelbrygga ↔ Stockholm City (via Handen)</h3>
+        <p style="color:var(--muted);font-size:0.88rem;margin-top:-0.25rem;">
+          Bus 839 paired with the next matching train, and vice versa for the return.
+        </p>
+        <div class="direction-pair">
+          <div class="route-block">
+            <h4>Dalarö Hotelbrygga → Stockholm City</h4>
+            <div id="journey-to-stockholm"></div>
+          </div>
+          <div class="route-block">
+            <h4>Stockholm City → Dalarö Hotelbrygga</h4>
+            <div id="journey-to-dalaro"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>Ferry · Dalarö Hotelbrygga ↔ Aspö</h3>
+        <div class="direction-pair">
+          <div class="route-block">
+            <h4>Dalarö Hotelbrygga → Aspö</h4>
+            <div id="ferry-to-aspo"></div>
+          </div>
+          <div class="route-block">
+            <h4>Aspö → Dalarö Hotelbrygga</h4>
+            <div id="ferry-from-aspo"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>Ferry · Dalarö Hotelbrygga ↔ Utö</h3>
+        <div class="direction-pair">
+          <div class="route-block">
+            <h4>Dalarö Hotelbrygga → Utö</h4>
+            <div id="ferry-to-uto"></div>
+          </div>
+          <div class="route-block">
+            <h4>Utö → Dalarö Hotelbrygga</h4>
+            <div id="ferry-from-uto"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>Ferry · Dalarö Hotelbrygga ↔ Ornö</h3>
+        <div class="direction-pair">
+          <div class="route-block">
+            <h4>Dalarö Hotelbrygga → Ornö</h4>
+            <div id="ferry-to-orno"></div>
+          </div>
+          <div class="route-block">
+            <h4>Ornö → Dalarö Hotelbrygga</h4>
+            <div id="ferry-from-orno"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <p id="generated-at" style="color:var(--muted);font-size:0.85rem;"></p>
+  </main>
+
+  <footer class="site-footer">
+    Aspö Atlas — a family project. Hosted for free on GitHub Pages.
+  </footer>
+
+  <script src="js/transport.js"></script>
+</body>
+</html>
