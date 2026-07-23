@@ -43,20 +43,37 @@ function nowHHMM() {
   return new Date().toTimeString().slice(0, 5);
 }
 
+// Builds the status banner via DOM APIs (rather than innerHTML) since opts.detail carries
+// the raw message from a caught fetch error.
 function setStatus(message, type, opts = {}) {
   const el = document.getElementById("status");
-  if (!message) {
-    el.innerHTML = "";
-    return;
-  }
-  const retryBtn = opts.onRetry ? `<button type="button" class="status-retry">Try again</button>` : "";
-  const details = opts.detail
-    ? `<details class="status-detail"><summary>Technical details</summary>${opts.detail}</details>`
-    : "";
-  el.innerHTML = `<div class="status-banner ${type}">${message}${retryBtn}${details}</div>`;
+  el.replaceChildren();
+  if (!message) return;
+
+  const banner = document.createElement("div");
+  banner.className = `status-banner ${type}`;
+  banner.textContent = message;
+
   if (opts.onRetry) {
-    el.querySelector(".status-retry").addEventListener("click", opts.onRetry);
+    const retryBtn = document.createElement("button");
+    retryBtn.type = "button";
+    retryBtn.className = "status-retry";
+    retryBtn.textContent = "Try again";
+    retryBtn.addEventListener("click", opts.onRetry);
+    banner.appendChild(retryBtn);
   }
+
+  if (opts.detail) {
+    const details = document.createElement("details");
+    details.className = "status-detail";
+    const summary = document.createElement("summary");
+    summary.textContent = "Technical details";
+    details.appendChild(summary);
+    details.appendChild(document.createTextNode(opts.detail));
+    banner.appendChild(details);
+  }
+
+  el.appendChild(banner);
 }
 
 async function loadTransportData() {
@@ -155,11 +172,33 @@ function markNextDeparture(entryRows) {
   if (nextIdx === -1) return;
   const { tr } = entryRows[nextIdx];
   tr.classList.add("next-departure");
-  tr.children[1].insertAdjacentHTML("beforeend", `<span class="next-badge">Next</span>`);
+  const badge = document.createElement("span");
+  badge.className = "next-badge";
+  badge.textContent = "Next";
+  tr.children[1].appendChild(badge);
+}
+
+function dayBoundaryRow(dayLabel, emptyText, colspan) {
+  const tr = document.createElement("tr");
+  tr.className = "day-boundary";
+
+  const dayCell = document.createElement("td");
+  dayCell.className = "day-cell";
+  dayCell.textContent = dayLabel;
+
+  const emptyCell = document.createElement("td");
+  emptyCell.className = "empty-cell";
+  emptyCell.colSpan = colspan;
+  emptyCell.textContent = emptyText;
+
+  tr.append(dayCell, emptyCell);
+  return tr;
 }
 
 // Renders a single route direction as one table spanning the whole visible date window,
-// with a day label on each day's first row instead of a separate table per day.
+// with a day label on each day's first row instead of a separate table per day. Departure
+// times and line numbers come from data/transport.json, so rows are built via DOM APIs
+// (not innerHTML) rather than trusting that data to be free of HTML metacharacters.
 function renderRouteTable(containerId, key, dates) {
   const container = document.getElementById(containerId);
   container.innerHTML = "";
@@ -171,17 +210,26 @@ function renderRouteTable(containerId, key, dates) {
   dates.forEach((iso) => {
     const entries = dayEntries(iso, key);
     if (entries.length === 0) {
-      const tr = document.createElement("tr");
-      tr.className = "day-boundary";
-      tr.innerHTML = `<td class="day-cell">${formatDayShort(iso)}</td><td class="empty-cell" colspan="2">No departures</td>`;
-      tbody.appendChild(tr);
+      tbody.appendChild(dayBoundaryRow(formatDayShort(iso), "No departures", 2));
       return;
     }
     anyEntries = true;
     entries.forEach((e, i) => {
       const tr = document.createElement("tr");
       if (i === 0) tr.className = "day-boundary";
-      tr.innerHTML = `<td class="day-cell">${i === 0 ? formatDayShort(iso) : ""}</td><td class="time-cell">${e.dep}</td><td>${e.line ?? ""}</td>`;
+
+      const dayCell = document.createElement("td");
+      dayCell.className = "day-cell";
+      dayCell.textContent = i === 0 ? formatDayShort(iso) : "";
+
+      const timeCell = document.createElement("td");
+      timeCell.className = "time-cell";
+      timeCell.textContent = e.dep;
+
+      const lineCell = document.createElement("td");
+      lineCell.textContent = e.line ?? "";
+
+      tr.append(dayCell, timeCell, lineCell);
       tbody.appendChild(tr);
       entryRows.push({ tr, iso, dep: e.dep });
     });
@@ -216,17 +264,29 @@ function renderJourneyTable(containerId, dates, firstKey, secondKey, firstArrKey
     const connections = buildConnections(first, second, firstArrKey);
 
     if (connections.length === 0) {
-      const tr = document.createElement("tr");
-      tr.className = "day-boundary";
-      tr.innerHTML = `<td class="day-cell">${formatDayShort(iso)}</td><td class="empty-cell" colspan="3">No connecting journey</td>`;
-      tbody.appendChild(tr);
+      tbody.appendChild(dayBoundaryRow(formatDayShort(iso), "No connecting journey", 3));
       return;
     }
     anyEntries = true;
     connections.forEach((c, i) => {
       const tr = document.createElement("tr");
       if (i === 0) tr.className = "day-boundary";
-      tr.innerHTML = `<td class="day-cell">${i === 0 ? formatDayShort(iso) : ""}</td><td class="time-cell">${c.dep}</td><td>arr ${c.arr} · dep ${c.connDep}</td><td>${c.finalArr ? `arr ${c.finalArr}` : ""}</td>`;
+
+      const dayCell = document.createElement("td");
+      dayCell.className = "day-cell";
+      dayCell.textContent = i === 0 ? formatDayShort(iso) : "";
+
+      const depCell = document.createElement("td");
+      depCell.className = "time-cell";
+      depCell.textContent = c.dep;
+
+      const changeCell = document.createElement("td");
+      changeCell.textContent = `arr ${c.arr} · dep ${c.connDep}`;
+
+      const onwardCell = document.createElement("td");
+      onwardCell.textContent = c.finalArr ? `arr ${c.finalArr}` : "";
+
+      tr.append(dayCell, depCell, changeCell, onwardCell);
       tbody.appendChild(tr);
       entryRows.push({ tr, iso, dep: c.dep });
     });
