@@ -1,8 +1,8 @@
 name: Update transport timetables
 
 # NOTE: GitHub only fires `schedule` events using the workflow file on the repository's
-# default branch, so the daily cron won't actually run until this is merged there. Use
-# workflow_dispatch (Actions tab, or the API) to test on any branch in the meantime.
+# default branch. This lives on main, so the daily cron is active; workflow_dispatch is
+# also available for on-demand runs (Actions tab, or the API).
 on:
   schedule:
     - cron: "0 3 * * *" # once daily, 03:00 UTC
