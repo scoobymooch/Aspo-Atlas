@@ -34,22 +34,176 @@ const WMO_CODES = {
   99: ["Thunderstorm with hail", "⛈️"],
 };
 
+// Merged {time, temp, code, precip} entries built once per load, so expanding a forecast
+// day just filters instead of re-mapping the whole hourly response each time.
+let hourlyEntries = [];
+
 function describeWeatherCode(code) {
   return WMO_CODES[code] ?? [`Weather code ${code}`, "🌡️"];
 }
 
-function setStatus(message, type) {
+// Builds the status banner via DOM APIs (rather than innerHTML) since opts.detail carries
+// the raw message from a caught fetch error.
+function setStatus(message, type, opts = {}) {
   const el = document.getElementById("status");
-  if (!message) {
-    el.innerHTML = "";
-    return;
+  el.replaceChildren();
+  if (!message) return;
+
+  const banner = document.createElement("div");
+  banner.className = `status-banner ${type}`;
+  banner.textContent = message;
+
+  if (opts.onRetry) {
+    const retryBtn = document.createElement("button");
+    retryBtn.type = "button";
+    retryBtn.className = "status-retry";
+    retryBtn.textContent = "Try again";
+    retryBtn.addEventListener("click", opts.onRetry);
+    banner.appendChild(retryBtn);
   }
-  el.innerHTML = `<div class="status-banner ${type}">${message}</div>`;
+
+  if (opts.detail) {
+    const details = document.createElement("details");
+    details.className = "status-detail";
+    const summary = document.createElement("summary");
+    summary.textContent = "Technical details";
+    details.appendChild(summary);
+    details.appendChild(document.createTextNode(opts.detail));
+    banner.appendChild(details);
+  }
+
+  el.appendChild(banner);
 }
 
 function formatDay(dateStr) {
   const date = new Date(`${dateStr}T00:00:00`);
   return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+}
+
+function formatHour(timeStr) {
+  return timeStr.slice(11, 16);
+}
+
+function buildHourlyEntries(hourly) {
+  if (!hourly) return [];
+  return hourly.time.map((time, i) => ({
+    time,
+    temp: hourly.temperature_2m[i],
+    code: hourly.weather_code[i],
+    precip: hourly.precipitation[i],
+  }));
+}
+
+function hourlyForDate(dateStr) {
+  return hourlyEntries.filter((entry) => entry.time.startsWith(dateStr));
+}
+
+// Builds hourly rows via DOM APIs (not innerHTML) — entry.time/temp/precip come from the
+// Open-Meteo response, so this avoids trusting external data inside a markup string.
+function renderHourlyDetail(container, entries) {
+  const rows = entries.map((entry) => {
+    const [desc, icon] = describeWeatherCode(entry.code);
+
+    const row = document.createElement("div");
+    row.className = "hourly-row";
+
+    const time = document.createElement("span");
+    time.className = "htime";
+    time.textContent = formatHour(entry.time);
+
+    const iconEl = document.createElement("span");
+    iconEl.className = "hicon";
+    iconEl.setAttribute("aria-hidden", "true");
+    iconEl.textContent = icon;
+
+    const srDesc = document.createElement("span");
+    srDesc.className = "sr-only";
+    srDesc.textContent = desc;
+
+    const temp = document.createElement("span");
+    temp.className = "htemp";
+    temp.textContent = `${Math.round(entry.temp)}°C`;
+
+    row.append(time, iconEl, srDesc, temp);
+
+    if (entry.precip > 0) {
+      const precipEl = document.createElement("span");
+      precipEl.className = "hprecip";
+      precipEl.textContent = `💧 ${entry.precip} mm`;
+      row.appendChild(precipEl);
+    }
+
+    return row;
+  });
+  container.replaceChildren(...rows);
+}
+
+function toggleForecastDay(toggleButton, detail, dateStr) {
+  const expanded = toggleButton.getAttribute("aria-expanded") === "true";
+
+  if (!expanded && !detail.dataset.rendered) {
+    renderHourlyDetail(detail, hourlyForDate(dateStr));
+    detail.dataset.rendered = "true";
+  }
+
+  toggleButton.setAttribute("aria-expanded", String(!expanded));
+  detail.hidden = expanded;
+}
+
+// The card's toggle is a real <button aria-controls="...">, so the expand/collapse
+// relationship is programmatically discoverable and keyboard activation (Enter/Space)
+// comes from native button semantics instead of a manual keydown handler.
+function renderForecastDay(dateStr, i, daily) {
+  const [desc, icon] = describeWeatherCode(daily.weather_code[i]);
+  const max = Math.round(daily.temperature_2m_max[i]);
+  const min = Math.round(daily.temperature_2m_min[i]);
+  const precip = daily.precipitation_sum[i];
+  const detailId = `hourly-detail-${dateStr}`;
+
+  const card = document.createElement("div");
+  card.className = "forecast-day";
+
+  const toggleButton = document.createElement("button");
+  toggleButton.type = "button";
+  toggleButton.className = "forecast-toggle";
+  toggleButton.setAttribute("aria-expanded", "false");
+  toggleButton.setAttribute("aria-controls", detailId);
+
+  const dayLabel = document.createElement("div");
+  dayLabel.className = "day-label";
+  dayLabel.textContent = formatDay(dateStr);
+
+  const iconEl = document.createElement("div");
+  iconEl.className = "icon";
+  iconEl.setAttribute("aria-hidden", "true");
+  iconEl.textContent = icon;
+
+  const range = document.createElement("div");
+  range.textContent = `${max}° / ${min}°`;
+
+  const descEl = document.createElement("div");
+  descEl.className = "desc";
+  descEl.textContent = desc;
+
+  toggleButton.append(dayLabel, iconEl, range, descEl);
+
+  if (precip > 0) {
+    const precipEl = document.createElement("div");
+    precipEl.className = "precip";
+    precipEl.textContent = `💧 ${precip} mm`;
+    toggleButton.appendChild(precipEl);
+  }
+
+  const detail = document.createElement("div");
+  detail.id = detailId;
+  detail.className = "hourly-detail";
+  detail.hidden = true;
+
+  card.append(toggleButton, detail);
+
+  toggleButton.addEventListener("click", () => toggleForecastDay(toggleButton, detail, dateStr));
+
+  return card;
 }
 
 async function loadWeather() {
@@ -60,6 +214,7 @@ async function loadWeather() {
   url.searchParams.set("longitude", ASPO_LON);
   url.searchParams.set("current", "temperature_2m,weather_code,wind_speed_10m");
   url.searchParams.set("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum");
+  url.searchParams.set("hourly", "temperature_2m,weather_code,precipitation");
   url.searchParams.set("timezone", "Europe/Stockholm");
   url.searchParams.set("forecast_days", "7");
 
@@ -70,8 +225,9 @@ async function loadWeather() {
     data = await res.json();
   } catch (err) {
     setStatus(
-      `Couldn't load weather data (${err.message}). Check your connection and try reloading.`,
-      "error"
+      "Couldn't load weather data. Check your connection and try again.",
+      "error",
+      { onRetry: () => location.reload(), detail: err.message }
     );
     return;
   }
@@ -81,32 +237,22 @@ async function loadWeather() {
   const current = data.current;
   if (current) {
     const [desc, icon] = describeWeatherCode(current.weather_code);
-    document.getElementById("current-icon").textContent = icon;
+    const iconEl = document.getElementById("current-icon");
+    iconEl.textContent = icon;
     document.getElementById("current-temp").textContent = `${Math.round(current.temperature_2m)}°C`;
     document.getElementById("current-desc").textContent = desc;
     document.getElementById("current-wind").textContent = `Wind ${Math.round(current.wind_speed_10m)} km/h`;
     document.getElementById("current-panel").hidden = false;
   }
 
+  hourlyEntries = buildHourlyEntries(data.hourly);
+
   const daily = data.daily;
   if (daily) {
     const grid = document.getElementById("forecast-grid");
     grid.innerHTML = "";
     daily.time.forEach((dateStr, i) => {
-      const [desc, icon] = describeWeatherCode(daily.weather_code[i]);
-      const max = Math.round(daily.temperature_2m_max[i]);
-      const min = Math.round(daily.temperature_2m_min[i]);
-      const precip = daily.precipitation_sum[i];
-      const div = document.createElement("div");
-      div.className = "forecast-day";
-      div.innerHTML = `
-        <div class="day-label">${formatDay(dateStr)}</div>
-        <div class="icon">${icon}</div>
-        <div>${max}° / ${min}°</div>
-        <div style="color:var(--muted);font-size:0.8rem;">${desc}</div>
-        ${precip > 0 ? `<div style="color:var(--muted);font-size:0.8rem;">💧 ${precip} mm</div>` : ""}
-      `;
-      grid.appendChild(div);
+      grid.appendChild(renderForecastDay(dateStr, i, daily));
     });
     document.getElementById("forecast-panel").hidden = false;
   }

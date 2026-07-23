@@ -13,33 +13,35 @@
       <nav>
         <a href="index.html">Home</a>
         <a href="weather.html" aria-current="page">Weather</a>
-        <a href="transport.html">Transport</a>
+        <a href="bus-train.html">Bus &amp; Train</a>
+        <a href="ferries.html">Ferries</a>
       </nav>
     </div>
   </header>
 
   <main>
     <h2>Weather at Aspö</h2>
-    <div id="status"></div>
+    <div id="status" role="status" aria-live="polite"></div>
 
     <section class="panel" id="current-panel" hidden>
       <h3>Right now</h3>
       <div class="current-weather">
-        <div class="icon" id="current-icon" style="font-size:2.4rem;"></div>
+        <div class="icon" id="current-icon" aria-hidden="true"></div>
         <div>
           <div class="temp" id="current-temp"></div>
           <div id="current-desc"></div>
-          <div id="current-wind" style="color:var(--muted);font-size:0.9rem;"></div>
+          <div id="current-wind" class="muted-note"></div>
         </div>
       </div>
     </section>
 
     <section class="panel" id="forecast-panel" hidden>
       <h3>Next 7 days</h3>
+      <p class="muted-note">Tap a day for hourly detail.</p>
       <div class="forecast-grid" id="forecast-grid"></div>
     </section>
 
-    <p style="color:var(--muted);font-size:0.85rem;">
+    <p class="muted-note">
       Data from <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>, fetched
       directly in your browser — no server in between.
     </p>
