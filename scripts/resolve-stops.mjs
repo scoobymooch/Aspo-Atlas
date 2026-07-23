@@ -132,14 +132,25 @@ async function resolveTarget(key, target) {
     );
   }
 
-  // Prefer an exact (case-insensitive) name match among in-radius candidates, then fall
-  // back to the highest-weight (busiest) one, since that's most likely the real stop
-  // rather than an obscure nearby address/POI match.
-  const exact = inRadius.find(
-    (c) => c.name.trim().toLowerCase() === target.search.trim().toLowerCase()
-  );
+  // HAFAS-based systems like ResRobot mix in generic all-caps "area aggregate" nodes
+  // (e.g. "HANDEN", "STOCKHOLM") alongside specific station stops (e.g. "Handen
+  // station", "Stockholm City station"). The aggregates carry artificially huge weight
+  // values, so a naive highest-weight pick grabs them -- but a vehicle's actual
+  // passlist entries reference the specific station's extId, never the aggregate's, so
+  // fetch-transport.mjs's passlist-membership matching would silently match nothing.
+  // Prefer specific stops; only fall back to an aggregate if nothing else is in radius.
+  const isAggregate = (name) => name === name.toUpperCase() && name !== name.toLowerCase();
+  const specific = inRadius.filter((c) => !isAggregate(c.name));
+  const pool = specific.length > 0 ? specific : inRadius;
+
+  // Prefer an exact (case-insensitive) name match, then a candidate whose name starts
+  // with the search term (e.g. "Stockholm City station" for a "Stockholm City"
+  // search), then fall back to the highest-weight (busiest) one in the pool.
+  const searchLower = target.search.trim().toLowerCase();
+  const exact = pool.find((c) => c.name.trim().toLowerCase() === searchLower);
+  const startsWith = pool.find((c) => c.name.trim().toLowerCase().startsWith(searchLower));
   const chosen =
-    exact ?? inRadius.sort((a, b) => Number(b.weight ?? 0) - Number(a.weight ?? 0))[0];
+    exact ?? startsWith ?? pool.sort((a, b) => Number(b.weight ?? 0) - Number(a.weight ?? 0))[0];
 
   console.log(`[${key}] chosen: ${chosen.name} (extId=${chosen.extId})`);
 
