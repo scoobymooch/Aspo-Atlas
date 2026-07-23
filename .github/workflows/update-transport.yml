@@ -1,0 +1,53 @@
+name: Update transport timetables
+
+# NOTE: GitHub only fires `schedule` events using the workflow file on the repository's
+# default branch, so the daily cron won't actually run until this is merged there. Use
+# workflow_dispatch (Actions tab, or the API) to test on any branch in the meantime.
+on:
+  schedule:
+    - cron: "0 3 * * *" # once daily, 03:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-transport
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Resolve stops (first run only)
+        env:
+          TRAFIKLAB_RESROBOT_API_KEY: ${{ secrets.TRAFIKLAB_RESROBOT_API_KEY }}
+        run: |
+          if [ ! -f data/stops.json ]; then
+            node scripts/resolve-stops.mjs
+          else
+            echo "data/stops.json already exists, skipping resolution."
+          fi
+
+      - name: Fetch transport timetables
+        env:
+          TRAFIKLAB_RESROBOT_API_KEY: ${{ secrets.TRAFIKLAB_RESROBOT_API_KEY }}
+        run: node scripts/fetch-transport.mjs
+
+      - name: Commit data if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/stops.json data/transport.json
+          if git diff --cached --quiet; then
+            echo "No data changes to commit."
+          else
+            git commit -m "Update transport data"
+            git push
+          fi

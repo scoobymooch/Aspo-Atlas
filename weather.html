@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Weather — Aspö Atlas</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <h1>Aspö Atlas</h1>
+      <nav>
+        <a href="index.html">Home</a>
+        <a href="weather.html" aria-current="page">Weather</a>
+        <a href="transport.html">Transport</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <h2>Weather at Aspö</h2>
+    <div id="status"></div>
+
+    <section class="panel" id="current-panel" hidden>
+      <h3>Right now</h3>
+      <div class="current-weather">
+        <div class="icon" id="current-icon" style="font-size:2.4rem;"></div>
+        <div>
+          <div class="temp" id="current-temp"></div>
+          <div id="current-desc"></div>
+          <div id="current-wind" style="color:var(--muted);font-size:0.9rem;"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="forecast-panel" hidden>
+      <h3>Next 7 days</h3>
+      <div class="forecast-grid" id="forecast-grid"></div>
+    </section>
+
+    <p style="color:var(--muted);font-size:0.85rem;">
+      Data from <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>, fetched
+      directly in your browser — no server in between.
+    </p>
+  </main>
+
+  <footer class="site-footer">
+    Aspö Atlas — a family project. Hosted for free on GitHub Pages.
+  </footer>
+
+  <script src="js/weather.js"></script>
+</body>
+</html>
