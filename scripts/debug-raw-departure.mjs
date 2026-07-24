@@ -23,7 +23,7 @@ const url = new URL("https://api.resrobot.se/v2.1/departureBoard");
 url.searchParams.set("id", "740001036"); // Dalaro Hotellbryggan -- shared origin for all three ferry routes
 url.searchParams.set("date", todayIso());
 url.searchParams.set("time", "00:00");
-url.searchParams.set("duration", "1439"); // full day, so we're not at the mercy of the dispatch time
+url.searchParams.set("duration", "1439");
 url.searchParams.set("passlist", "1");
 url.searchParams.set("format", "json");
 url.searchParams.set("products", "256"); // ferry only
@@ -39,16 +39,56 @@ if (!res.ok) {
 const data = await res.json();
 const departures = Array.isArray(data.Departure) ? data.Departure : data.Departure ? [data.Departure] : [];
 
-console.log(`Got ${departures.length} ferry departure(s) today.\n`);
-console.log("=== FULL RAW RESPONSE ===");
-console.log(JSON.stringify(data, null, 2));
-
-if (departures.length > 0) {
-  console.log("\n=== TOP-LEVEL KEYS ON FIRST DEPARTURE ===");
-  console.log(Object.keys(departures[0]));
-  const product = departures[0].ProductAtStop ?? (Array.isArray(departures[0].Product) ? departures[0].Product[0] : departures[0].Product);
-  if (product) {
-    console.log("\n=== PRODUCT KEYS ===");
-    console.log(Object.keys(product));
-  }
+console.log(`Got ${departures.length} ferry departure(s) today.`);
+if (departures.length === 0) {
+  console.log("No departures to inspect -- nothing more to print.");
+  process.exit(0);
 }
+
+// Prefer a departure that actually has Notes, so we can see what that looks like
+// populated rather than empty/absent.
+const sample = departures.find((d) => d.Notes) ?? departures[0];
+
+console.log("\n=== EXPLICIT FIELD VALUES (sample departure) ===");
+console.log("name:", sample.name);
+console.log("direction:", sample.direction);
+console.log("directionFlag:", sample.directionFlag);
+console.log("JourneyDetailRef:", JSON.stringify(sample.JourneyDetailRef));
+console.log("JourneyStatus:", sample.JourneyStatus);
+console.log("Notes:", JSON.stringify(sample.Notes));
+
+const product = sample.ProductAtStop ?? (Array.isArray(sample.Product) ? sample.Product[0] : sample.Product);
+if (product) {
+  console.log("\nProduct.name:", product.name);
+  console.log("Product.internalName:", product.internalName);
+  console.log("Product.displayNumber:", product.displayNumber);
+  console.log("Product.num:", product.num);
+  console.log("Product.line:", product.line);
+  console.log("Product.lineId:", product.lineId);
+  console.log("Product.operator:", product.operator);
+  console.log("Product.operatorCode:", product.operatorCode);
+  console.log("Product.admin:", product.admin);
+  console.log("Product.matchId:", product.matchId);
+}
+
+const stops = sample.Stops?.Stop ?? sample.Stops?.stop;
+const stopArr = Array.isArray(stops) ? stops : stops ? [stops] : [];
+console.log(`\nPasslist: ${stopArr.length} stop(s)`);
+for (const s of stopArr) {
+  console.log(
+    `  ${s.name ?? s.extId} -- arrTime=${s.arrTime ?? "-"} depTime=${s.depTime ?? "-"} routeIdx=${s.routeIdx}`
+  );
+}
+
+console.log("\n=== FULL JSON OF SAMPLE DEPARTURE ===");
+console.log(JSON.stringify(sample, null, 2));
+
+// Also show line numbers actually seen today, to cross-check against what the
+// real pipeline captures.
+const lines = new Set(
+  departures.map((d) => {
+    const p = d.ProductAtStop ?? (Array.isArray(d.Product) ? d.Product[0] : d.Product);
+    return p?.line ?? p?.displayNumber ?? p?.num ?? p?.name;
+  })
+);
+console.log("\nDistinct line values seen today:", [...lines]);
