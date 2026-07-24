@@ -203,18 +203,15 @@ function markNextDeparture(entryRows) {
 }
 
 // Column-based sibling of markNextDeparture, for stop x trip matrices where a "departure" is a
-// whole column (header time cell + every stop's data cell in that trip) rather than a row.
-// columns: [{ iso, dep }], columnCells: same length, each entry the list of cells (header cell
-// first) belonging to that trip's column.
+// whole column (every stop's data cell in that trip) rather than a row. No text badge here --
+// unlike a single highlighted row, a whole tinted column is already unambiguous on its own,
+// and a badge anchored to one cell within it reads as belonging to that stop rather than the
+// column. columns: [{ iso, dep }], columnCells: same length, each entry the list of cells
+// belonging to that trip's column.
 function markNextTripColumn(columns, columnCells) {
   const nextIdx = findNextDeparture(columns, todayIso(), timeToMinutes(nowHHMM()));
   if (nextIdx === -1) return;
-  const cells = columnCells[nextIdx];
-  cells.forEach((cell) => cell.classList.add("next-trip"));
-  const badge = document.createElement("span");
-  badge.className = "next-badge";
-  badge.textContent = "Next";
-  cells[0].appendChild(badge);
+  columnCells[nextIdx].forEach((cell) => cell.classList.add("next-trip"));
 }
 
 // filters is optional: { timeWindow: {startMin, endMin} | null, hidePast: bool }.
