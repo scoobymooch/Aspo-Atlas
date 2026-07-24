@@ -2,6 +2,11 @@
 // timetable window, so dates outside that range simply render without a weather line.
 let weatherByDate = {};
 
+// Must match table.timetable.stop-matrix th.time-col/td.time-cell's width in css/style.css --
+// used to pin colSpan'd day-group header widths explicitly (see renderLineDirectionTable)
+// rather than trusting table-layout:fixed to distribute them from the colgroup.
+const TIME_COL_WIDTH = 74;
+
 // Stop names from the API carry a trailing municipality tag and (usually) "brygga" --
 // useful for disambiguating raw data, but noise once shown in a table already scoped to
 // ferry stops. Order matters: the municipality suffix comes off first so a trailing
@@ -161,12 +166,27 @@ function stopOrder(entries) {
   return [...byExtId.values()].sort((a, b) => a.routeIdx - b.routeIdx);
 }
 
-function cellText(stop) {
-  if (!stop) return null;
-  if (stop.arr && stop.dep) {
-    return stop.arr === stop.dep ? stop.arr : `${stop.arr} / ${stop.dep}`;
+// Fills a stop's time-cell and reports whether it wrote anything. A differing arr/dep pair is
+// stacked as two lines ("10:27" over "10:30") rather than joined as "10:27 / 10:30" on one
+// line -- each line is then just a plain "HH:MM", which fits the 74px column comfortably,
+// where the joined form often didn't (table-layout:fixed's per-column width guarantee turned
+// out to not be watertight against content wider than the declared width, which is exactly
+// what let a handful of wide dual-time cells push a whole day-group out of alignment with the
+// header above it).
+function fillTimeCell(td, stop) {
+  if (!stop) return false;
+  if (stop.arr && stop.dep && stop.arr !== stop.dep) {
+    const arrEl = document.createElement("div");
+    arrEl.textContent = stop.arr;
+    const depEl = document.createElement("div");
+    depEl.textContent = stop.dep;
+    td.append(arrEl, depEl);
+    return true;
   }
-  return stop.arr ?? stop.dep ?? null;
+  const text = stop.arr ?? stop.dep ?? null;
+  if (!text) return false;
+  td.textContent = text;
+  return true;
 }
 
 // After the table is in the live document, scroll its wrapper so today's column group is in
@@ -283,6 +303,15 @@ function renderLineDirectionTable(section, lineId, direction, entries, dayColumn
   // One column-group header per day (colSpan'd) -- no per-trip header row underneath it,
   // since each trip's own anchor time already shows on its first (Dalarö-adjacent) body row,
   // making a dedicated header row just a duplicate of that row.
+  //
+  // Each group also gets an explicit pixel width (count * TIME_COL_WIDTH) instead of trusting
+  // table-layout:fixed to distribute it from the colgroup: fixed layout is only precise when a
+  // <col>'s width maps to a single, unspanned cell -- for a colSpan'd cell it still has to
+  // *distribute* that col-derived total across the span, and in practice that distribution
+  // drifts by a pixel or so per group. Harmless for one group, but the drift compounds group
+  // after group across a whole week, and by the last few groups of a busy line's table the
+  // header and body columns are visibly out of step. Pinning the width directly removes the
+  // ambiguity entirely -- there's nothing left for the browser to "distribute".
   columns.forEach((col) => {
     if (!col.isFirstOfDay) return;
     const count = columns.filter((c) => c.dayIndex === col.dayIndex).length;
@@ -290,6 +319,7 @@ function renderLineDirectionTable(section, lineId, direction, entries, dayColumn
     dayTh.colSpan = count;
     dayTh.className = "day-group-th";
     dayTh.dataset.dayFirst = col.iso;
+    dayTh.style.width = `${count * TIME_COL_WIDTH}px`;
     if (col.dayIndex > 0) dayTh.classList.add("day-boundary-col");
     dayTh.appendChild(dayGroupHeader(col.iso));
     headRow1.appendChild(dayTh);
@@ -326,10 +356,7 @@ function renderLineDirectionTable(section, lineId, direction, entries, dayColumn
         td.classList.add("padding-col");
       } else {
         const stop = col.trip.stops.find((s) => s.extId === stopMeta.extId);
-        const text = cellText(stop);
-        if (text) {
-          td.textContent = text;
-        } else {
+        if (!fillTimeCell(td, stop)) {
           td.textContent = "—";
           td.classList.add("empty-cell");
         }

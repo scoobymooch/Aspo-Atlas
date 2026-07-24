@@ -542,6 +542,15 @@ table.timetable.stop-matrix .sticky-col {
   min-width: 132px;
   width: 132px;
   white-space: normal;
+  /* Same reliability note as td.time-cell above: table-layout:fixed's declared width isn't
+     dependably honored against content that doesn't comfortably fit -- one long unbroken word
+     in a stop name (e.g. "Hotellbryggan") can still stretch this column past 132px/104px in
+     practice. overflow-wrap: anywhere is the one that actually prevents it -- unlike
+     break-word, "anywhere" counts toward the element's *minimum* content size, so
+     table-layout:fixed no longer sees a reason to expand the column in the first place;
+     overflow:hidden is a backstop for anything that still doesn't fit. */
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 /* The header is a second, separate table/wrapper rather than living in this table's own
@@ -589,6 +598,12 @@ table.timetable.stop-matrix th.time-col,
 table.timetable.stop-matrix td.time-cell {
   min-width: 74px;
   width: 74px;
+  /* table-layout:fixed is supposed to guarantee this width regardless of content, but a cell
+     wide enough to want more room can still stretch it in practice -- overflow:hidden makes
+     the guarantee actually hold, which matters here since a single stretched cell throws off
+     every day-group's alignment to its right (js/ferries.js fillTimeCell already keeps normal
+     content well under this width, so this is a backstop, not an expected everyday clip). */
+  overflow: hidden;
   text-align: center;
 }
 
@@ -615,7 +630,11 @@ table.timetable.stop-matrix th.next-trip {
 
 @media (max-width: 480px) {
   table.timetable.stop-matrix .sticky-col {
-    min-width: 104px;
-    width: 104px;
+    /* 104px looked tighter but forced the longest real stop name ("Dalarö Hotellbryggan",
+       specifically its unbroken "Hotellbryggan") into an ugly mid-word break under the
+       overflow-wrap:anywhere backstop above. 122px is enough for that word on its own line
+       without one, while staying narrower than the 132px desktop column. */
+    min-width: 122px;
+    width: 122px;
   }
 }
