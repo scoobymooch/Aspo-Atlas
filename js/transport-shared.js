@@ -97,8 +97,16 @@ async function loadTransportData() {
 function renderGeneratedAt(elementId) {
   if (!transportData?.generatedAt) return;
   const el = document.getElementById(elementId);
-  el.textContent = `Updated ${new Date(transportData.generatedAt).toLocaleString("en-GB")}`;
+  el.textContent = `Timetables updated ${new Date(transportData.generatedAt).toLocaleString("en-GB")}`;
   el.hidden = false;
+}
+
+function debounce(fn, delay) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
 }
 
 function initDatePicker({ input, todayBtn }, onRenderWeek) {
@@ -108,6 +116,21 @@ function initDatePicker({ input, todayBtn }, onRenderWeek) {
   input.min = today;
   input.max = maxDate;
   input.value = today;
+
+  // The date-picker's wrapper is a sticky "filter bar" (css/style.css); tables' own sticky
+  // header rows need its live height as a top offset so they stick flush underneath it
+  // instead of overlapping or leaving a gap. Re-measured on resize since flex-wrap can change
+  // its height on narrow viewports.
+  const filterBar = input.closest(".date-picker");
+  const updateFilterHeight = () => {
+    if (!filterBar) return;
+    document.documentElement.style.setProperty(
+      "--filter-height",
+      `${filterBar.getBoundingClientRect().height}px`
+    );
+  };
+  updateFilterHeight();
+  window.addEventListener("resize", debounce(updateFilterHeight, 150));
 
   input.addEventListener("change", () => {
     if (input.value) onRenderWeek(input.value);

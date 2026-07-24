@@ -118,11 +118,17 @@ section.panel h2 {
 }
 
 .date-picker {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   margin-bottom: 1rem;
+  padding: 0.75rem 0;
+  background: var(--sand);
+  border-bottom: 1px solid var(--border);
 }
 
 .date-picker input[type="date"] {
@@ -511,6 +517,16 @@ table.timetable tr.next-departure td {
    a busy line's full week can run to 30-50+ columns. Sticky first column, explicit minimum
    widths, and day-boundary dividers keep that width navigable instead of an undifferentiated
    wall of numbers; see the plan's "wide-table handling" section for the reasoning. */
+table.timetable.stop-matrix {
+  /* Both the header and body tables (js/ferries.js renderLineDirectionTable) share an
+     identical <colgroup>, so column widths must come from the <col> elements, not from
+     content -- table-layout:fixed is what makes a <col>'s width authoritative. Sized to
+     content (max-content) rather than stretched to 100% of the wrapper, so the table can be
+     wider than its scroll wrapper and actually trigger horizontal overflow. */
+  table-layout: fixed;
+  width: max-content;
+}
+
 table.timetable.stop-matrix th,
 table.timetable.stop-matrix td {
   white-space: nowrap;
@@ -527,14 +543,34 @@ table.timetable.stop-matrix .sticky-col {
   white-space: normal;
 }
 
-table.timetable.stop-matrix td.stop-name-cell.tracked-stop {
-  font-weight: 700;
-  color: var(--sea-dark);
+/* The header is a second, separate table/wrapper rather than living in this table's own
+   <thead> -- see the long comment in renderLineDirectionTable for why a sticky <th> inside a
+   horizontally-scrollable ancestor doesn't stick to the viewport the way it should. Sticking
+   this whole block instead sidesteps that: its own overflow-x has no bearing on how ITS
+   position:sticky resolves against the page. overflow:hidden still allows the JS-driven
+   scrollLeft mirroring (js/ferries.js) that keeps it lined up with the body's real,
+   user-scrollable horizontal position. */
+.matrix-header-scroll {
+  position: sticky;
+  top: var(--filter-height, 0px);
+  z-index: 3;
+  overflow: hidden;
+  background: var(--card-bg);
+  border-bottom: 2px solid var(--border);
 }
 
-table.timetable.stop-matrix td.stop-name-cell.tracked-stop::before {
-  content: "⚓";
-  margin-right: 0.3rem;
+/* The "Stop" corner cell only needs left-stickiness (from .sticky-col) here -- the whole
+   header block above already handles vertical stickiness. Bump it above the other header
+   cells so it stays on top of them while scrolling horizontally. */
+table.timetable.stop-matrix thead th.sticky-col {
+  z-index: 4;
+}
+
+/* A blank slot padded in so every table's day-groups share identical widths (see
+   computeDayColumnPlan) -- distinct from .empty-cell (a stop a real trip doesn't reach) since
+   this column has no trip at all, so no "--" per row would just be noise. */
+table.timetable.stop-matrix td.padding-col {
+  background: var(--sand);
 }
 
 table.timetable.stop-matrix th.time-col,
