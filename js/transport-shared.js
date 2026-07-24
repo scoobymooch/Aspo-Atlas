@@ -179,6 +179,21 @@ function markNextDeparture(entryRows) {
   timeCell.appendChild(badge);
 }
 
+// Column-based sibling of markNextDeparture, for stop x trip matrices where a "departure" is a
+// whole column (header time cell + every stop's data cell in that trip) rather than a row.
+// columns: [{ iso, dep }], columnCells: same length, each entry the list of cells (header cell
+// first) belonging to that trip's column.
+function markNextTripColumn(columns, columnCells) {
+  const nextIdx = findNextDeparture(columns, todayIso(), timeToMinutes(nowHHMM()));
+  if (nextIdx === -1) return;
+  const cells = columnCells[nextIdx];
+  cells.forEach((cell) => cell.classList.add("next-trip"));
+  const badge = document.createElement("span");
+  badge.className = "next-badge";
+  badge.textContent = "Next";
+  cells[0].appendChild(badge);
+}
+
 // filters is optional: { timeWindow: {startMin, endMin} | null, hidePast: bool }.
 function passesFilters(iso, dep, filters) {
   if (!filters) return true;
