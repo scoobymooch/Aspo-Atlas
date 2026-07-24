@@ -227,9 +227,10 @@ table.timetable td.day-cell {
   font-size: 0.75rem;
   color: var(--muted);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 0.3rem;
-  white-space: nowrap;
 }
 
 table.timetable.dual-route thead tr:first-child th:not(:first-child) {
@@ -547,16 +548,27 @@ table.timetable.stop-matrix .sticky-col {
    <thead> -- see the long comment in renderLineDirectionTable for why a sticky <th> inside a
    horizontally-scrollable ancestor doesn't stick to the viewport the way it should. Sticking
    this whole block instead sidesteps that: its own overflow-x has no bearing on how ITS
-   position:sticky resolves against the page. overflow:hidden still allows the JS-driven
-   scrollLeft mirroring (js/ferries.js) that keeps it lined up with the body's real,
-   user-scrollable horizontal position. */
-.matrix-header-scroll {
+   position:sticky resolves against the page.
+   .matrix-header-sticky carries the actual stickiness, so the line-name heading inside it
+   sticks together with the day columns. .matrix-header-scroll is the inner, non-sticky child
+   that clips the table and receives the JS-driven scrollLeft mirroring (js/ferries.js) that
+   keeps it lined up with the body's real, user-scrollable horizontal position -- kept
+   separate so the heading itself doesn't slide sideways along with the table. */
+.matrix-header-sticky {
   position: sticky;
   top: var(--filter-height, 0px);
   z-index: 3;
-  overflow: hidden;
   background: var(--card-bg);
   border-bottom: 2px solid var(--border);
+}
+
+.matrix-header-sticky h4 {
+  margin: 0;
+  padding: 0.6rem 0.5rem 0.3rem;
+}
+
+.matrix-header-scroll {
+  overflow: hidden;
 }
 
 /* The "Stop" corner cell only needs left-stickiness (from .sticky-col) here -- the whole
