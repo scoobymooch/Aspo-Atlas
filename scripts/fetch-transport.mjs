@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Maintains data/transport.json: a rolling ~8-week window of timetables for the routes
-// this site cares about (bus 839, the Handen<->Stockholm City train, and the three
-// Dalarö Hotelbrygga ferries), pre-filtered so the client never has to touch the
-// Trafiklab API directly (their API doesn't send CORS headers -- see README).
+// this site cares about (bus 839, the Handen<->Stockholm City train, and the ferry
+// lines reachable from Dalarö Hotellbrygga), pre-filtered so the client never has to
+// touch the Trafiklab API directly (their API doesn't send CORS headers -- see README).
 //
 // Strategy: rather than re-fetching the whole window every run, this keeps whatever
 // days are already stored, fetches only the day(s) newly entering the window, and
@@ -11,11 +11,18 @@
 // window (~56 days x 6 stops).
 //
 // Each stop's departureBoard is requested with passlist=1, so every departure includes
-// the list of stops it later halts at (with arrival times). Routes are identified by
-// checking whether the *other* endpoint's extId appears in that passlist, rather than
-// by guessing line numbers or destination-name text -- more robust given the
-// uncertainty of things like exact SL line codes or which of several similarly-named
+// the list of stops it later halts at (with arrival times). Bus/train routes are
+// identified by checking whether the *other* endpoint's extId appears in that passlist,
+// rather than by guessing line numbers or destination-name text -- more robust given
+// the uncertainty of things like exact SL line codes or which of several similarly-named
 // "direction" strings a given trip will show.
+//
+// Ferries are modeled differently (see buildFerryLines): Aspö, Utö, and Ornö aren't
+// independent point-to-point routes -- they're intermediate/terminal stops on longer,
+// overlapping multi-stop lines (confirmed against a live API response; e.g. line 20-1
+// passes Aspö on its way toward Ornö's western piers, while line 19-1 reaches Ornö by a
+// completely different eastern chain of stops). So ferry trips keep their full passlist
+// and are grouped by line number, truncated to the Dalarö<->tracked-island span.
 //
 // Usage: TRAFIKLAB_RESROBOT_API_KEY=... node scripts/fetch-transport.mjs
 
@@ -178,6 +185,102 @@ function filterByClassAndPasslist(entries, allowedClasses, targetExtId, arrKey) 
     .filter(Boolean);
 }
 
+// Ferry trips keep their full stop-by-stop passlist (unlike bus/train, which only need
+// one target stop's arrival) so the site can render the real, multi-stop line -- not a
+// collapsed point-to-point route. JourneyDetailRef.ref is the trip's stable identity,
+// used for dedup below; it's an opaque internal key and is never shown to users.
+function ferryTripsFromBoard(entries) {
+  return entries
+    .filter((e) => FERRY_CLASSES.has(classOf(e)))
+    .map((e) => ({
+      ref: e.JourneyDetailRef?.ref ?? null,
+      line: lineOf(e),
+      stops: extractPasslist(e).map((s) => ({
+        extId: String(s.extId),
+        name: s.name,
+        routeIdx: s.routeIdx,
+        arr: hms(s.arrTime),
+        dep: hms(s.depTime),
+      })),
+    }))
+    .filter((t) => t.ref && t.stops.length > 1);
+}
+
+// A trip is outbound if it starts at Dalarö, inbound if it ends there. Anything matching
+// neither shouldn't happen given the boards queried, but is dropped defensively rather
+// than misfiled.
+function assignDirection(trip, dalaroExtId) {
+  const first = trip.stops[0];
+  const last = trip.stops[trip.stops.length - 1];
+  if (first.extId === dalaroExtId) return "outbound";
+  if (last.extId === dalaroExtId) return "inbound";
+  return null;
+}
+
+// Trims a trip's stops to the span this site cares about. Direction matters here:
+// outbound trips (Dalarö -> islands) should drop everything AFTER the last tracked
+// island (e.g. Nåttarö/Nynäshamn past Utö); inbound trips (islands -> Dalarö) should
+// drop everything BEFORE the first tracked island, keeping through to the Dalarö arrival
+// -- truncating "after the last tracked island" on an inbound trip would cut off the
+// arrival at Dalarö itself, which is the whole point of showing it. Returns null if the
+// trip never touches a tracked island at all (e.g. lines 18-1 and 40, which go to
+// Edesön and Nämdö/Sandhamn respectively and are dropped entirely).
+function truncateToScope(trip, direction, trackedExtIds) {
+  const trackedIdxs = trip.stops
+    .map((s, i) => (trackedExtIds.has(s.extId) ? i : -1))
+    .filter((i) => i !== -1);
+  if (trackedIdxs.length === 0) return null;
+
+  const stops =
+    direction === "outbound"
+      ? trip.stops.slice(0, trackedIdxs[trackedIdxs.length - 1] + 1)
+      : trip.stops.slice(trackedIdxs[0]);
+  return { ref: trip.ref, stops };
+}
+
+function buildFerryLines(boards, dalaroExtId, trackedExtIds) {
+  // Dedup by ref across all boards, first sighting wins. Dalarö's board is queried
+  // first (see fetchDayData), so for any trip that genuinely originates there its
+  // Dalarö-board sighting is already the fullest downstream run; a later sighting of
+  // the same ref on an island's board (if the API ever surfaces one) would only be a
+  // strict suffix, safe to drop.
+  const byRef = new Map();
+  for (const board of boards) {
+    for (const trip of ferryTripsFromBoard(board)) {
+      if (!byRef.has(trip.ref)) byRef.set(trip.ref, trip);
+    }
+  }
+
+  const ferryLines = {};
+  for (const trip of byRef.values()) {
+    const direction = assignDirection(trip, dalaroExtId);
+    if (!direction) {
+      console.warn(`  Ferry trip ${trip.ref} (line ${trip.line}) starts/ends at neither end queried -- skipping.`);
+      continue;
+    }
+    const truncated = truncateToScope(trip, direction, trackedExtIds);
+    if (!truncated) continue; // never reaches a tracked island
+
+    const lineId = trip.line ?? "?";
+    if (!ferryLines[lineId]) ferryLines[lineId] = { outbound: [], inbound: [] };
+    ferryLines[lineId][direction].push(truncated);
+  }
+
+  // Sort each direction's trips chronologically by their first stop's time, so
+  // rendering doesn't need to re-sort.
+  for (const line of Object.values(ferryLines)) {
+    for (const dir of ["outbound", "inbound"]) {
+      line[dir].sort((a, b) => {
+        const ta = a.stops[0].dep ?? a.stops[0].arr ?? "";
+        const tb = b.stops[0].dep ?? b.stops[0].arr ?? "";
+        return ta.localeCompare(tb);
+      });
+    }
+  }
+
+  return ferryLines;
+}
+
 async function fetchDayData(date, stops) {
   const { dalaroHotelbrygga, handen, handenBusStop, stockholmCity, aspoDalaro, uto, orno } = stops;
 
@@ -194,21 +297,35 @@ async function fetchDayData(date, stops) {
   const ornoBoard = await fetchDepartureBoard(orno.extId, date, PRODUCT.ferry);
   await sleep(POLITE_DELAY_MS);
 
+  const trackedExtIds = new Set([aspoDalaro.extId, uto.extId, orno.extId].map(String));
+
   return {
     busToHanden: filterByClassAndPasslist(dalaroBoard, BUS_CLASSES, handenBusStop.extId, "arrHanden"),
-    ferryToAspo: filterByClassAndPasslist(dalaroBoard, FERRY_CLASSES, aspoDalaro.extId, "arr"),
-    ferryToUto: filterByClassAndPasslist(dalaroBoard, FERRY_CLASSES, uto.extId, "arr"),
-    ferryToOrno: filterByClassAndPasslist(dalaroBoard, FERRY_CLASSES, orno.extId, "arr"),
-
     busToDalaro: filterByClassAndPasslist(handenBoard, BUS_CLASSES, dalaroHotelbrygga.extId, "arrDalaro"),
     trainToStockholm: filterByClassAndPasslist(handenBoard, TRAIN_CLASSES, stockholmCity.extId, "arrStockholm"),
-
     trainToHanden: filterByClassAndPasslist(stockholmBoard, TRAIN_CLASSES, handen.extId, "arrHanden"),
 
-    ferryFromAspo: filterByClassAndPasslist(aspoBoard, FERRY_CLASSES, dalaroHotelbrygga.extId, "arr"),
-    ferryFromUto: filterByClassAndPasslist(utoBoard, FERRY_CLASSES, dalaroHotelbrygga.extId, "arr"),
-    ferryFromOrno: filterByClassAndPasslist(ornoBoard, FERRY_CLASSES, dalaroHotelbrygga.extId, "arr"),
+    ferryLines: buildFerryLines(
+      [dalaroBoard, aspoBoard, utoBoard, ornoBoard],
+      String(dalaroHotelbrygga.extId),
+      trackedExtIds
+    ),
   };
+}
+
+function summarizeDay(dayData) {
+  const parts = [];
+  for (const [key, value] of Object.entries(dayData)) {
+    if (key === "ferryLines") {
+      const lineCounts = Object.entries(value)
+        .map(([line, { outbound, inbound }]) => `${line}(${outbound.length}/${inbound.length})`)
+        .join(",");
+      parts.push(`ferryLines=[${lineCounts || "none"}]`);
+    } else {
+      parts.push(`${key}=${value.length}`);
+    }
+  }
+  return parts.join(" ");
 }
 
 async function main() {
@@ -240,10 +357,7 @@ async function main() {
   for (const date of missingDates) {
     console.log(`Fetching ${date}...`);
     store.days[date] = await fetchDayData(date, stops);
-    const counts = Object.entries(store.days[date])
-      .map(([k, v]) => `${k}=${v.length}`)
-      .join(" ");
-    console.log(`  ${counts}`);
+    console.log(`  ${summarizeDay(store.days[date])}`);
   }
 
   store.window = { start: today, end: targetDates[targetDates.length - 1] };
