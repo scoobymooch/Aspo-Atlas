@@ -25,6 +25,12 @@ jobs:
         with:
           node-version: 20
 
+      # Temporary -- throwaway schema-inspection step, remove once done.
+      - name: DEBUG dump raw departureBoard response
+        env:
+          TRAFIKLAB_RESROBOT_API_KEY: ${{ secrets.TRAFIKLAB_RESROBOT_API_KEY }}
+        run: node scripts/debug-raw-departure.mjs
+
       - name: Resolve stops (first run only)
         env:
           TRAFIKLAB_RESROBOT_API_KEY: ${{ secrets.TRAFIKLAB_RESROBOT_API_KEY }}
