@@ -2,9 +2,17 @@
 // timetable window, so dates outside that range simply render without a weather line.
 let weatherByDate = {};
 
-// Reference extIds for the three tracked islands (data/stops.json), duplicated here rather
-// than fetched at runtime since the pipeline already resolves and commits them.
-const TRACKED_EXT_IDS = new Set(["740034456", "740034448", "740069753"]);
+// Stop names from the API carry a trailing municipality tag and (usually) "brygga" --
+// useful for disambiguating raw data, but noise once shown in a table already scoped to
+// ferry stops. Order matters: the municipality suffix comes off first so a trailing
+// "brygga" left exposed by that strip is then also removed. Compound names like
+// "Hotellbryggan" are untouched since "brygga" only matches as its own trailing word.
+function cleanStopName(name) {
+  return name
+    .replace(/\s*\([^)]*\bkn\)\s*$/, "")
+    .replace(/\s+brygga$/i, "")
+    .trim();
+}
 
 async function loadFerryWeather() {
   try {
@@ -57,10 +65,18 @@ function dayGroupHeader(iso) {
     const temp = document.createElement("span");
     temp.textContent = `${info.max}°/${info.min}°`;
 
-    const wind = document.createElement("span");
-    wind.textContent = `💨${info.wind}`;
+    const windIcon = document.createElement("span");
+    windIcon.setAttribute("aria-hidden", "true");
+    windIcon.textContent = "💨";
 
-    weatherEl.append(iconEl, srDesc, temp, wind);
+    const windSrLabel = document.createElement("span");
+    windSrLabel.className = "sr-only";
+    windSrLabel.textContent = "Wind";
+
+    const wind = document.createElement("span");
+    wind.textContent = `${info.wind} km/h`;
+
+    weatherEl.append(iconEl, srDesc, temp, windIcon, windSrLabel, wind);
     wrap.appendChild(weatherEl);
   }
 
@@ -92,6 +108,47 @@ function anchorTime(direction, trip) {
   return direction === "outbound" ? trip.stops[0].dep : trip.stops[trip.stops.length - 1].arr;
 }
 
+// For every date in the visible week, the largest number of trips any single line+direction
+// runs that day. Every table pads its own day-groups up to this shared count (blank columns
+// where it has fewer trips than the week's busiest line that day) so a given calendar day
+// lands at the same horizontal offset in every table on the page -- required for the synced
+// horizontal scroll wired up at the end of renderWeek to actually keep tables aligned.
+function computeDayColumnPlan(lines, dates) {
+  const plan = new Map();
+  dates.forEach((iso) => {
+    let max = 0;
+    Object.values(lines).forEach((lineTrips) => {
+      for (const dir of ["outbound", "inbound"]) {
+        const count = lineTrips[dir].filter((e) => e.iso === iso).length;
+        if (count > max) max = count;
+      }
+    });
+    plan.set(iso, max);
+  });
+  return plan;
+}
+
+// Scrolling any one table's wrapper moves every other table's wrapper by the same amount, so
+// the page reads as one continuously-aligned grid split into per-line sections rather than
+// requiring the user to re-orient left/right when moving between tables. Relies on
+// computeDayColumnPlan having given every table identical day-group widths.
+function syncHorizontalScroll(container) {
+  const wraps = [...container.querySelectorAll(".table-scroll")];
+  if (wraps.length < 2) return;
+  let syncing = false;
+  wraps.forEach((wrap) => {
+    wrap.addEventListener("scroll", () => {
+      if (syncing) return;
+      syncing = true;
+      const left = wrap.scrollLeft;
+      wraps.forEach((other) => {
+        if (other !== wrap) other.scrollLeft = left;
+      });
+      syncing = false;
+    });
+  });
+}
+
 // Row order: every stop seen across the week for this line+direction, ordered by routeIdx
 // (confirmed trip-global against live data, not query-relative -- see fetch-transport.mjs).
 function stopOrder(entries) {
@@ -106,17 +163,19 @@ function stopOrder(entries) {
 
 function cellText(stop) {
   if (!stop) return null;
-  if (stop.arr && stop.dep) return `${stop.arr} / ${stop.dep}`;
+  if (stop.arr && stop.dep) {
+    return stop.arr === stop.dep ? stop.arr : `${stop.arr} / ${stop.dep}`;
+  }
   return stop.arr ?? stop.dep ?? null;
 }
 
 // After the table is in the live document, scroll its wrapper so today's column group is in
 // view instead of leaving the user landed on the week's start with today's trips off-screen.
 // Falls back to scrollLeft 0 (already the default) when today isn't in the visible week.
-function scrollToToday(scrollWrap, table) {
-  const todayCell = table.querySelector(`[data-day-first="${todayIso()}"]`);
+function scrollToToday(scrollWrap, headerTable) {
+  const todayCell = headerTable.querySelector(`[data-day-first="${todayIso()}"]`);
   if (!todayCell) return;
-  const stickyCol = table.querySelector(".sticky-col");
+  const stickyCol = headerTable.querySelector(".sticky-col");
   const stickyWidth = stickyCol ? stickyCol.getBoundingClientRect().width : 0;
   const containerRect = scrollWrap.getBoundingClientRect();
   const cellRect = todayCell.getBoundingClientRect();
@@ -128,40 +187,95 @@ function scrollToToday(scrollWrap, table) {
 
 // Renders one line+direction as a single table spanning the whole visible week: rows are
 // stops in line order, columns are individual trips grouped by day (thicker left border on
-// the first column of each new day). Appends the table to `section` directly rather than
-// returning it, since the auto-scroll-to-today step needs live layout to measure against.
-function renderLineDirectionTable(section, direction, entries) {
-  entries.sort((a, b) => {
-    if (a.iso !== b.iso) return a.iso.localeCompare(b.iso);
-    return timeToMinutes(anchorTime(direction, a.trip)) - timeToMinutes(anchorTime(direction, b.trip));
+// the first column of each new day). Every day-group is padded to dayColumnPlan's shared
+// width with blank columns where this line+direction has fewer trips than the week's busiest
+// line that day, so day boundaries line up across every table on the page (see
+// computeDayColumnPlan/syncHorizontalScroll). Appends a heading plus the table to `section`
+// directly rather than returning them, since the auto-scroll-to-today step needs live layout
+// to measure against. The heading names the line and its observed endpoints for this
+// direction -- outbound and inbound naturally read in opposite order, so the endpoints alone
+// convey direction without needing "Outbound"/"Inbound" text.
+function renderLineDirectionTable(section, lineId, direction, entries, dayColumnPlan, dates) {
+  const byIso = new Map();
+  entries.forEach((e) => {
+    if (!byIso.has(e.iso)) byIso.set(e.iso, []);
+    byIso.get(e.iso).push(e);
+  });
+  byIso.forEach((list) => {
+    list.sort(
+      (a, b) => timeToMinutes(anchorTime(direction, a.trip)) - timeToMinutes(anchorTime(direction, b.trip))
+    );
   });
 
   const columns = [];
-  let lastIso = null;
   let dayIndex = -1;
-  entries.forEach(({ iso, trip }) => {
-    const isFirstOfDay = iso !== lastIso;
-    if (isFirstOfDay) {
-      dayIndex++;
-      lastIso = iso;
+  dates.forEach((iso) => {
+    const slotCount = dayColumnPlan.get(iso) ?? 0;
+    if (slotCount === 0) return;
+    dayIndex++;
+    const dayEntries = byIso.get(iso) ?? [];
+    for (let slot = 0; slot < slotCount; slot++) {
+      const e = dayEntries[slot];
+      columns.push({
+        iso,
+        dayIndex,
+        isFirstOfDay: slot === 0,
+        trip: e ? e.trip : null,
+        anchor: e ? anchorTime(direction, e.trip) : null,
+        isPadding: !e,
+      });
     }
-    columns.push({ iso, trip, dayIndex, isFirstOfDay, anchor: anchorTime(direction, trip) });
   });
 
   const rows = stopOrder(entries);
 
-  const table = document.createElement("table");
-  table.className = "timetable stop-matrix";
+  const heading = document.createElement("h4");
+  heading.textContent = `Line ${lineId} (${cleanStopName(rows[0].name)} – ${cleanStopName(rows[rows.length - 1].name)})`;
+  section.appendChild(heading);
+
+  // The header lives in its own table/wrapper rather than a <thead> inside the scrolling
+  // table: a horizontally-scrollable ancestor (overflow-x: auto) forces its overflow-y to
+  // compute as "auto" too (CSS's overflow-x/y visible-pairing rule), which makes that
+  // ancestor -- not the page -- the sticky containing block for any position:sticky
+  // descendant, so a sticky <th>'s "top" ends up added to its row's static position instead
+  // of sticking to the viewport. A sticky *block* has no such problem, since its own
+  // overflow-x doesn't affect how ITS sticky positioning resolves against ITS ancestors. The
+  // header table's horizontal scroll position is mirrored from the body's via the "scroll"
+  // listener below (overflow: hidden still allows programmatic scrollLeft, just no user
+  // drag/scrollbar of its own -- exactly what's wanted since the body wrapper is the one
+  // real, user-interactive horizontal scroller).
+  //
+  // Both tables share an identical <colgroup> (built once, reused twice) so their columns
+  // stay pixel-aligned under table-layout:fixed regardless of how each table's own content
+  // widths would otherwise differ under normal auto-layout.
+  function buildColgroup() {
+    const colgroup = document.createElement("colgroup");
+    const stopCol = document.createElement("col");
+    stopCol.className = "sticky-col";
+    colgroup.appendChild(stopCol);
+    columns.forEach(() => {
+      const col = document.createElement("col");
+      col.className = "time-col";
+      colgroup.appendChild(col);
+    });
+    return colgroup;
+  }
+
+  const headerTable = document.createElement("table");
+  headerTable.className = "timetable stop-matrix";
+  headerTable.appendChild(buildColgroup());
 
   const thead = document.createElement("thead");
   const headRow1 = document.createElement("tr");
-  const stopTh = document.createElement("th");
-  stopTh.rowSpan = 2;
-  stopTh.className = "sticky-col";
-  stopTh.textContent = "Stop";
-  headRow1.appendChild(stopTh);
+  const stopTh1 = document.createElement("th");
+  stopTh1.className = "sticky-col";
+  stopTh1.textContent = "Stop";
+  headRow1.appendChild(stopTh1);
 
   const headRow2 = document.createElement("tr");
+  const stopTh2 = document.createElement("th");
+  stopTh2.className = "sticky-col";
+  headRow2.appendChild(stopTh2);
   const columnCells = [];
 
   columns.forEach((col) => {
@@ -177,25 +291,34 @@ function renderLineDirectionTable(section, direction, entries) {
 
     const timeTh = document.createElement("th");
     timeTh.className = "time-col";
+    if (col.isPadding) timeTh.classList.add("padding-col");
     if (col.isFirstOfDay) {
       timeTh.dataset.dayFirst = col.iso;
       if (col.dayIndex > 0) timeTh.classList.add("day-boundary-col");
     }
-    timeTh.textContent = col.anchor ?? "—";
+    timeTh.textContent = col.isPadding ? "" : col.anchor ?? "—";
     headRow2.appendChild(timeTh);
     columnCells.push([timeTh]);
   });
 
   thead.append(headRow1, headRow2);
-  table.appendChild(thead);
+  headerTable.appendChild(thead);
+
+  const headerScroll = document.createElement("div");
+  headerScroll.className = "matrix-header-scroll";
+  headerScroll.appendChild(headerTable);
+  section.appendChild(headerScroll);
+
+  const bodyTable = document.createElement("table");
+  bodyTable.className = "timetable stop-matrix";
+  bodyTable.appendChild(buildColgroup());
 
   const tbody = document.createElement("tbody");
   rows.forEach((stopMeta) => {
     const tr = document.createElement("tr");
     const nameTd = document.createElement("td");
     nameTd.className = "sticky-col stop-name-cell";
-    if (TRACKED_EXT_IDS.has(stopMeta.extId)) nameTd.classList.add("tracked-stop");
-    nameTd.textContent = stopMeta.name;
+    nameTd.textContent = cleanStopName(stopMeta.name);
     tr.appendChild(nameTd);
 
     columns.forEach((col, idx) => {
@@ -203,13 +326,17 @@ function renderLineDirectionTable(section, direction, entries) {
       td.className = "time-cell";
       if (col.dayIndex > 0 && col.isFirstOfDay) td.classList.add("day-boundary-col");
 
-      const stop = col.trip.stops.find((s) => s.extId === stopMeta.extId);
-      const text = cellText(stop);
-      if (text) {
-        td.textContent = text;
+      if (col.isPadding) {
+        td.classList.add("padding-col");
       } else {
-        td.textContent = "—";
-        td.classList.add("empty-cell");
+        const stop = col.trip.stops.find((s) => s.extId === stopMeta.extId);
+        const text = cellText(stop);
+        if (text) {
+          td.textContent = text;
+        } else {
+          td.textContent = "—";
+          td.classList.add("empty-cell");
+        }
       }
 
       tr.appendChild(td);
@@ -218,48 +345,47 @@ function renderLineDirectionTable(section, direction, entries) {
 
     tbody.appendChild(tr);
   });
-  table.appendChild(tbody);
+  bodyTable.appendChild(tbody);
 
+  // Padding columns have no real time, and (for a future day) would otherwise satisfy
+  // findNextDeparture's date-only comparison and wrongly claim the "Next" badge -- restrict
+  // the candidates to real trips only.
+  const realIndices = columns.map((_, i) => i).filter((i) => !columns[i].isPadding);
   markNextTripColumn(
-    columns.map((c) => ({ iso: c.iso, dep: c.anchor })),
-    columnCells
+    realIndices.map((i) => ({ iso: columns[i].iso, dep: columns[i].anchor })),
+    realIndices.map((i) => columnCells[i])
   );
 
-  const scrollWrap = document.createElement("div");
-  scrollWrap.className = "table-scroll";
-  scrollWrap.appendChild(table);
-  section.appendChild(scrollWrap);
+  const bodyScroll = document.createElement("div");
+  bodyScroll.className = "table-scroll";
+  bodyScroll.appendChild(bodyTable);
+  section.appendChild(bodyScroll);
 
-  scrollToToday(scrollWrap, table);
+  bodyScroll.addEventListener("scroll", () => {
+    headerScroll.scrollLeft = bodyScroll.scrollLeft;
+  });
+
+  scrollToToday(bodyScroll, headerTable);
 }
 
 // Builds one <section class="panel"> for a line, with an outbound and/or inbound matrix --
 // whichever directions actually ran trips in the visible week. Returns false (and appends
 // nothing) if the line had no trips at all, so lines simply disappear rather than showing an
 // empty shell.
-function renderLineSection(container, lineId, lineTrips) {
+function renderLineSection(container, lineId, lineTrips, dayColumnPlan, dates) {
   const outEntries = lineTrips.outbound;
   const inEntries = lineTrips.inbound;
   if (outEntries.length === 0 && inEntries.length === 0) return false;
 
   const section = document.createElement("section");
   section.className = "panel";
-  const heading = document.createElement("h3");
-  heading.textContent = `Line ${lineId}`;
-  section.appendChild(heading);
   container.appendChild(section);
 
   if (outEntries.length > 0) {
-    const h4 = document.createElement("h4");
-    h4.textContent = "Outbound · from Dalarö";
-    section.appendChild(h4);
-    renderLineDirectionTable(section, "outbound", outEntries);
+    renderLineDirectionTable(section, lineId, "outbound", outEntries, dayColumnPlan, dates);
   }
   if (inEntries.length > 0) {
-    const h4 = document.createElement("h4");
-    h4.textContent = "Inbound · to Dalarö";
-    section.appendChild(h4);
-    renderLineDirectionTable(section, "inbound", inEntries);
+    renderLineDirectionTable(section, lineId, "inbound", inEntries, dayColumnPlan, dates);
   }
 
   return true;
@@ -274,14 +400,21 @@ function renderWeek(startIso) {
   const container = document.getElementById("ferry-lines");
   container.innerHTML = "";
 
+  // Un-hide before building tables, not after: renderLineDirectionTable's scroll-to-today
+  // step measures live layout as it builds each table, and an element under a hidden ancestor
+  // always measures zero -- that read must happen while #content is actually visible, or the
+  // computed scroll offset silently comes out as 0.
+  document.getElementById("content").hidden = false;
+
   const lines = collectLineTrips(dates);
   const lineIds = Object.keys(lines).sort((a, b) =>
     a.localeCompare(b, undefined, { numeric: true })
   );
+  const dayColumnPlan = computeDayColumnPlan(lines, dates);
 
   let anySection = false;
   lineIds.forEach((lineId) => {
-    if (renderLineSection(container, lineId, lines[lineId])) anySection = true;
+    if (renderLineSection(container, lineId, lines[lineId], dayColumnPlan, dates)) anySection = true;
   });
 
   if (!anySection) {
@@ -291,7 +424,7 @@ function renderWeek(startIso) {
     container.appendChild(note);
   }
 
-  document.getElementById("content").hidden = false;
+  syncHorizontalScroll(container);
 }
 
 async function init() {
