@@ -229,21 +229,22 @@ function renderLineDirectionTable(section, lineId, direction, entries, dayColumn
 
   const rows = stopOrder(entries);
 
-  const heading = document.createElement("h4");
-  heading.textContent = `Line ${lineId} (${cleanStopName(rows[0].name)} – ${cleanStopName(rows[rows.length - 1].name)})`;
-  section.appendChild(heading);
-
   // The header lives in its own table/wrapper rather than a <thead> inside the scrolling
   // table: a horizontally-scrollable ancestor (overflow-x: auto) forces its overflow-y to
   // compute as "auto" too (CSS's overflow-x/y visible-pairing rule), which makes that
   // ancestor -- not the page -- the sticky containing block for any position:sticky
   // descendant, so a sticky <th>'s "top" ends up added to its row's static position instead
   // of sticking to the viewport. A sticky *block* has no such problem, since its own
-  // overflow-x doesn't affect how ITS sticky positioning resolves against ITS ancestors. The
-  // header table's horizontal scroll position is mirrored from the body's via the "scroll"
-  // listener below (overflow: hidden still allows programmatic scrollLeft, just no user
-  // drag/scrollbar of its own -- exactly what's wanted since the body wrapper is the one
-  // real, user-interactive horizontal scroller).
+  // overflow-x doesn't affect how ITS sticky positioning resolves against ITS ancestors.
+  //
+  // The heading needs to stick together with the day columns (so a stuck header always shows
+  // which line it belongs to), but must NOT slide sideways when the table scrolls
+  // horizontally -- so it lives in an outer sticky block, with an inner overflow:hidden div
+  // (only that div's scrollLeft is mirrored from the body) holding just the table:
+  //   .matrix-header-sticky (position: sticky)
+  //     <h4>
+  //     .matrix-header-scroll (overflow: hidden, scrollLeft mirrored from body)
+  //       headerTable
   //
   // Both tables share an identical <colgroup> (built once, reused twice) so their columns
   // stay pixel-aligned under table-layout:fixed regardless of how each table's own content
@@ -261,6 +262,13 @@ function renderLineDirectionTable(section, lineId, direction, entries, dayColumn
     return colgroup;
   }
 
+  const headerSticky = document.createElement("div");
+  headerSticky.className = "matrix-header-sticky";
+
+  const heading = document.createElement("h4");
+  heading.textContent = `Line ${lineId} (${cleanStopName(rows[0].name)} – ${cleanStopName(rows[rows.length - 1].name)})`;
+  headerSticky.appendChild(heading);
+
   const headerTable = document.createElement("table");
   headerTable.className = "timetable stop-matrix";
   headerTable.appendChild(buildColgroup());
@@ -272,47 +280,35 @@ function renderLineDirectionTable(section, lineId, direction, entries, dayColumn
   stopTh1.textContent = "Stop";
   headRow1.appendChild(stopTh1);
 
-  const headRow2 = document.createElement("tr");
-  const stopTh2 = document.createElement("th");
-  stopTh2.className = "sticky-col";
-  headRow2.appendChild(stopTh2);
-  const columnCells = [];
-
+  // One column-group header per day (colSpan'd) -- no per-trip header row underneath it,
+  // since each trip's own anchor time already shows on its first (Dalarö-adjacent) body row,
+  // making a dedicated header row just a duplicate of that row.
   columns.forEach((col) => {
-    if (col.isFirstOfDay) {
-      const count = columns.filter((c) => c.dayIndex === col.dayIndex).length;
-      const dayTh = document.createElement("th");
-      dayTh.colSpan = count;
-      dayTh.className = "day-group-th";
-      if (col.dayIndex > 0) dayTh.classList.add("day-boundary-col");
-      dayTh.appendChild(dayGroupHeader(col.iso));
-      headRow1.appendChild(dayTh);
-    }
-
-    const timeTh = document.createElement("th");
-    timeTh.className = "time-col";
-    if (col.isPadding) timeTh.classList.add("padding-col");
-    if (col.isFirstOfDay) {
-      timeTh.dataset.dayFirst = col.iso;
-      if (col.dayIndex > 0) timeTh.classList.add("day-boundary-col");
-    }
-    timeTh.textContent = col.isPadding ? "" : col.anchor ?? "—";
-    headRow2.appendChild(timeTh);
-    columnCells.push([timeTh]);
+    if (!col.isFirstOfDay) return;
+    const count = columns.filter((c) => c.dayIndex === col.dayIndex).length;
+    const dayTh = document.createElement("th");
+    dayTh.colSpan = count;
+    dayTh.className = "day-group-th";
+    dayTh.dataset.dayFirst = col.iso;
+    if (col.dayIndex > 0) dayTh.classList.add("day-boundary-col");
+    dayTh.appendChild(dayGroupHeader(col.iso));
+    headRow1.appendChild(dayTh);
   });
 
-  thead.append(headRow1, headRow2);
+  thead.appendChild(headRow1);
   headerTable.appendChild(thead);
 
   const headerScroll = document.createElement("div");
   headerScroll.className = "matrix-header-scroll";
   headerScroll.appendChild(headerTable);
-  section.appendChild(headerScroll);
+  headerSticky.appendChild(headerScroll);
+  section.appendChild(headerSticky);
 
   const bodyTable = document.createElement("table");
   bodyTable.className = "timetable stop-matrix";
   bodyTable.appendChild(buildColgroup());
 
+  const columnCells = columns.map(() => []);
   const tbody = document.createElement("tbody");
   rows.forEach((stopMeta) => {
     const tr = document.createElement("tr");
@@ -349,7 +345,8 @@ function renderLineDirectionTable(section, lineId, direction, entries, dayColumn
 
   // Padding columns have no real time, and (for a future day) would otherwise satisfy
   // findNextDeparture's date-only comparison and wrongly claim the "Next" badge -- restrict
-  // the candidates to real trips only.
+  // the candidates to real trips only. The badge lands on each column's first (topmost) body
+  // cell, since there's no header row of its own left to carry it.
   const realIndices = columns.map((_, i) => i).filter((i) => !columns[i].isPadding);
   markNextTripColumn(
     realIndices.map((i) => ({ iso: columns[i].iso, dep: columns[i].anchor })),
@@ -360,6 +357,15 @@ function renderLineDirectionTable(section, lineId, direction, entries, dayColumn
   bodyScroll.className = "table-scroll";
   bodyScroll.appendChild(bodyTable);
   section.appendChild(bodyScroll);
+
+  // table-layout:fixed with an explicit colgroup should size both tables identically off
+  // "width: max-content" alone -- but when a table's own first (and only) header row is
+  // entirely colSpan'd cells with no unspanned per-column cell anywhere, at least this browser
+  // stops trusting the colgroup for max-content sizing and shrinks the table to fit whatever
+  // space happens to be available instead, silently breaking column alignment. The body table
+  // has no such row (plain one-cell-per-column), so it sizes correctly; copying its measured
+  // width onto the header table (whose columns are otherwise identical) sidesteps the bug.
+  headerTable.style.width = `${bodyTable.getBoundingClientRect().width}px`;
 
   bodyScroll.addEventListener("scroll", () => {
     headerScroll.scrollLeft = bodyScroll.scrollLeft;
