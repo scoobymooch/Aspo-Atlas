@@ -8,6 +8,7 @@
   --card-bg: #ffffff;
   --border: #e0dccf;
   --radius: 10px;
+  --shadow: rgba(28, 43, 48, 0.18);
 }
 
 * {
@@ -504,4 +505,69 @@ table.timetable tr.next-departure td {
 .journey-leg {
   font-size: 0.9rem;
   color: var(--muted);
+}
+
+/* Stop x trip ferry matrix (js/ferries.js) -- one column per trip, grouped by day, which at
+   a busy line's full week can run to 30-50+ columns. Sticky first column, explicit minimum
+   widths, and day-boundary dividers keep that width navigable instead of an undifferentiated
+   wall of numbers; see the plan's "wide-table handling" section for the reasoning. */
+table.timetable.stop-matrix th,
+table.timetable.stop-matrix td {
+  white-space: nowrap;
+}
+
+table.timetable.stop-matrix .sticky-col {
+  position: sticky;
+  left: 0;
+  background: var(--card-bg);
+  z-index: 1;
+  box-shadow: 4px 0 6px -4px var(--shadow) inset;
+  min-width: 132px;
+  width: 132px;
+  white-space: normal;
+}
+
+table.timetable.stop-matrix td.stop-name-cell.tracked-stop {
+  font-weight: 700;
+  color: var(--sea-dark);
+}
+
+table.timetable.stop-matrix td.stop-name-cell.tracked-stop::before {
+  content: "⚓";
+  margin-right: 0.3rem;
+}
+
+table.timetable.stop-matrix th.time-col,
+table.timetable.stop-matrix td.time-cell {
+  min-width: 74px;
+  width: 74px;
+  text-align: center;
+}
+
+table.timetable.stop-matrix th.day-group-th {
+  text-align: center;
+}
+
+table.timetable.stop-matrix .day-boundary-col {
+  border-left: 2px solid var(--border);
+}
+
+table.timetable.stop-matrix td.empty-cell {
+  text-align: center;
+}
+
+table.timetable.stop-matrix th.next-trip,
+table.timetable.stop-matrix td.next-trip {
+  background: #fdf3e6;
+}
+
+table.timetable.stop-matrix th.next-trip {
+  font-weight: 700;
+}
+
+@media (max-width: 480px) {
+  table.timetable.stop-matrix .sticky-col {
+    min-width: 104px;
+    width: 104px;
+  }
 }
