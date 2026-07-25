@@ -21,6 +21,9 @@ for getting to and from the island.
   - It writes the result to `data/transport.json` and commits it, which triggers a
     redeploy.
   - The browser only ever reads that same-origin static JSON file.
+- **Links** (`links.html` / `js/links.js`): reads a static `data/links.md` file and
+  renders it client-side. Each `##` heading is a category, and each
+  `- [Label](url) optional description` line is a link entry.
 
 ## Data pipeline
 

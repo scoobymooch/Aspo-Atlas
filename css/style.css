@@ -638,3 +638,34 @@ table.timetable.stop-matrix th.next-trip {
     width: 122px;
   }
 }
+
+.link-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.link-list li {
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.link-list li:last-child {
+  border-bottom: none;
+}
+
+.link-list a {
+  color: var(--sea);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.link-list a:hover {
+  text-decoration: underline;
+}
+
+.link-description {
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin-top: 0.15rem;
+}
